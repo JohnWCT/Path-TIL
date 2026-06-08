@@ -52,6 +52,7 @@ patch_progress.json
 # Data directories (local paths; regenerate via scripts)
 WSI_example/
 WSI_TME/
+WSI_TME_error/
 QuPathOutput/
 Testset/
 

@@ -102,6 +102,12 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=1000, help='Batch size for prediction (default: 1000)')
     parser.add_argument('--num_threads', type=int, default=1, help='Number of threads for processing (default: 1)')
     parser.add_argument('--results_path', type=str, default="./results", help='Results directory path (default: ./results)')
+    parser.add_argument(
+        '--generic-tiff-default-objective',
+        type=float,
+        default=40.0,
+        help='generic-tiff 無法從 TIFF Resolution 推算物鏡倍率時的預設值（預設 40，與本資料集 Philips mpp=0.25 對齊）',
+    )
     return parser.parse_args()
 
 # python TILscout_edit.py --slide_dir WSI_example --slide_ext "*.tiff" --batch_size 100 --num_threads 1
@@ -166,35 +172,104 @@ def get_completed_patch_zoom_factor(slide_base, slide_patch_dir):
     return entry.get("zoom_factor", 1.0)
 
 # Function to process images and generate patches
-def get_objective_power(slide: openslide.OpenSlide) -> float:
+def detect_slide_vendor(slide: openslide.OpenSlide) -> str:
+    """依 OpenSlide vendor 判斷掃描儀／TIFF 類型。"""
+    return slide.properties.get(openslide.PROPERTY_NAME_VENDOR, "unknown").strip().lower()
+
+
+def objective_from_mpp(mpp_x: float) -> float:
+    """與原 TILScout 相同：objective ≈ 10 / mpp（mpp 單位 µm/pixel）。"""
+    if mpp_x <= 0:
+        raise ValueError("MPP value cannot be zero or negative.")
+    return 10.0 / mpp_x
+
+
+def get_objective_power_philips(slide: openslide.OpenSlide) -> float:
     """
-    從 OpenSlide 物件中獲取物鏡倍率。
-    優先嘗試讀取 'openslide.objective-power'。
-    如果失敗，則嘗試從 'openslide.mpp-x' 計算。
-    如果兩者都缺失，則拋出一個 ValueError。
+    Philips WSI（及具標準 OpenSlide MPP 標籤之格式）：
+    1) openslide.objective-power
+    2) openslide.mpp-x → 10/mpp
     """
     try:
-        # 1. 優先嘗試直接讀取 'objective-power'
-        objective = float(slide.properties[openslide.PROPERTY_NAME_OBJECTIVE_POWER])
-        return objective
+        return float(slide.properties[openslide.PROPERTY_NAME_OBJECTIVE_POWER])
     except (KeyError, ValueError):
-        # 2. 如果失敗，嘗試從 MPP 計算
         print("Info: 'openslide.objective-power' not found. Trying to calculate from MPP.")
-        try:
-            mpp_x = float(slide.properties[openslide.PROPERTY_NAME_MPP_X])
-            if mpp_x == 0:
-                raise ValueError("MPP value cannot be zero.")
-            # 經驗公式： objective ≈ 10 / mpp
-            objective = 10 / mpp_x
-            return objective
-        except (KeyError, ValueError, ZeroDivisionError) as e:
-            # 3. 如果連 MPP 都無法獲取或無效，拋出一個明確的錯誤
-            error_message = (
-                "Could not determine objective power. Both 'openslide.objective-power' and "
-                "'openslide.mpp-x' are missing or invalid in the slide properties."
-            )
-            # 使用 raise 將錯誤拋出，中止函式執行
-            raise ValueError(error_message) from e
+        mpp_x = float(slide.properties[openslide.PROPERTY_NAME_MPP_X])
+        return objective_from_mpp(mpp_x)
+
+
+def _mpp_from_tiff_resolution_tags(slide: openslide.OpenSlide) -> float:
+    """
+    generic-tiff（常見 tifffile 匯出）常無 openslide.mpp-x，但留有 TIFF Resolution：
+      tiff.XResolution / tiff.YResolution + tiff.ResolutionUnit
+
+    換算（µm/pixel）：
+      centimeter → 10000 / pixels_per_cm
+      inch       → 25400 / pixels_per_inch
+      millimeter → 1000 / pixels_per_mm
+    """
+    x_res = float(slide.properties["tiff.XResolution"])
+    y_res = float(slide.properties["tiff.YResolution"])
+    unit = slide.properties.get("tiff.ResolutionUnit", "").strip().lower()
+    if x_res <= 0 or y_res <= 0:
+        raise ValueError("TIFF resolution must be positive.")
+
+    if unit == "centimeter":
+        mpp_x = 10000.0 / x_res
+        mpp_y = 10000.0 / y_res
+    elif unit == "inch":
+        mpp_x = 25400.0 / x_res
+        mpp_y = 25400.0 / y_res
+    elif unit in ("millimeter", "millimetre"):
+        mpp_x = 1000.0 / x_res
+        mpp_y = 1000.0 / y_res
+    else:
+        raise ValueError(f"Unsupported tiff.ResolutionUnit: {unit!r}")
+
+    return (mpp_x + mpp_y) / 2.0
+
+
+def get_objective_power_generic_tiff(slide: openslide.OpenSlide) -> float:
+    """
+    generic-tiff 專用物鏡倍率推估：
+    1) 由 TIFF Resolution 標籤換算 mpp，再 objective = 10/mpp
+    2) 若標籤缺失，使用 --generic-tiff-default-objective（預設 40x）
+    """
+    try:
+        mpp = _mpp_from_tiff_resolution_tags(slide)
+        objective = objective_from_mpp(mpp)
+        print(
+            f"Info: generic-tiff objective from TIFF resolution tags: "
+            f"{objective:.2f}x (mpp≈{mpp:.4f})"
+        )
+        return objective
+    except (KeyError, ValueError) as e:
+        fallback = float(args.generic_tiff_default_objective)
+        print(
+            f"Warning: generic-tiff cannot read TIFF resolution ({e}); "
+            f"using --generic-tiff-default-objective={fallback:.2f}x"
+        )
+        return fallback
+
+
+def get_objective_power(slide: openslide.OpenSlide) -> float:
+    """
+    依掃描儀／TIFF 類型選擇物鏡倍率讀取方式：
+      philips      → get_objective_power_philips（維持原邏輯）
+      generic-tiff → get_objective_power_generic_tiff（TIFF Resolution 換算）
+      其他         → 先 Philips 路徑，失敗再 generic-tiff 路徑
+    """
+    vendor = detect_slide_vendor(slide)
+    if vendor == "philips":
+        return get_objective_power_philips(slide)
+    if vendor == "generic-tiff":
+        return get_objective_power_generic_tiff(slide)
+
+    print(f"Info: unknown vendor '{vendor}', trying Philips then generic-tiff methods.")
+    try:
+        return get_objective_power_philips(slide)
+    except (KeyError, ValueError, ZeroDivisionError):
+        return get_objective_power_generic_tiff(slide)
 
 def process_image(directory_path, patch_path):
     label = os.path.basename(directory_path)
@@ -218,6 +293,8 @@ def process_image(directory_path, patch_path):
         return None
 
     try:
+        vendor = detect_slide_vendor(slide)
+        print(f"Slide vendor/format: {vendor}")
         try:
             objective = get_objective_power(slide)
         except ValueError as e:

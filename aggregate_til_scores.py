@@ -33,17 +33,40 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def slide_id_from_score_path(score_file):
+    """由檔名推得 slide_id，可正確處理含空格或括號的檔名（如 S110-12651K (1)）。"""
+    return os.path.basename(score_file).replace("_TIL_score.txt", "")
+
+
 def parse_score_file(score_file):
+    """
+    解析 TILscout_edit.py 寫入的 *_TIL_score.txt。
+
+    檔案內容格式為「<slide_id> <score>」，以空白分隔，例如：
+      S104-10358A 0.011234847738247757
+      S110-12651K (1) 0.012385877545808593
+
+    slide_id 本身可能含空格（複製檔名如 "S110-12651K (1)"），
+    因此不可假設 parts[0]=id、parts[1]=score；分數一律取最後一個 token。
+    slide_id 以檔名為準，與 TILscout_edit 輸出檔命名一致。
+    """
+    slide_id = slide_id_from_score_path(score_file)
+
     with open(score_file, "r", encoding="utf-8") as f:
         line = f.readline().strip()
 
     if not line:
-        slide_id = os.path.basename(score_file).replace("_TIL_score.txt", "")
         return slide_id, math.nan
 
     parts = line.split()
-    slide_id = parts[0]
-    score = float(parts[1]) if len(parts) > 1 else math.nan
+    if len(parts) < 2:
+        return slide_id, math.nan
+
+    try:
+        score = float(parts[-1])
+    except ValueError:
+        score = math.nan
+
     return slide_id, score
 
 
