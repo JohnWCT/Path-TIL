@@ -111,6 +111,11 @@ def parse_args():
         action="store_true",
         help="Validate paths/splits and write configs without importing TensorFlow",
     )
+    parser.add_argument(
+        "--baseline-only",
+        action="store_true",
+        help="Evaluate pretrained Stage 0 on train/val/test without fine-tuning",
+    )
     return parser.parse_args()
 
 
@@ -564,7 +569,7 @@ def build_imgaug_sequence_class(tf):
 
 
 def training_inputs(tf, args, images, labels, fold, stage_seed):
-    if args.aug == "heavy":
+    if args.aug == "heavy" and not args.baseline_only:
         sequence_class = build_imgaug_sequence_class(tf)
         train_data = sequence_class(
             images,
@@ -686,7 +691,50 @@ def predict_split(tf, model, frame, images, indices, fold, split, args, output):
         frame, indices, fold, split, probabilities
     )
     predictions.to_csv(output, index=False, float_format="%.8f")
-    return classification_metrics(y_true, probabilities)
+    return classification_metrics(y_true, probabilities), predictions
+
+
+def evaluate_stage_model(
+    tf,
+    auc_class,
+    args,
+    frame,
+    images,
+    indices,
+    fold,
+    stage,
+    model_path,
+    learning_rate,
+    validation,
+    fold_dir,
+):
+    model = load_and_validate_model(
+        tf, model_path, on_off(args.mixed_precision)
+    )
+    compile_model(tf, model, learning_rate, auc_class)
+    validation_result = model.evaluate(
+        validation, verbose=0, return_dict=True
+    )
+    keras_val_auc = float(validation_result["auc"])
+    metrics = {}
+    predictions = {}
+    for split in ("train", "val", "test"):
+        metrics[split], predictions[split] = predict_split(
+            tf,
+            model,
+            frame,
+            images,
+            indices[split],
+            fold,
+            split,
+            args,
+            fold_dir
+            / "stage{0}_{1}_predictions.csv".format(stage, split),
+        )
+    del model
+    tf.keras.backend.clear_session()
+    gc.collect()
+    return keras_val_auc, metrics, predictions
 
 
 def train_fold(tf, auc_class, args, frame, assignments, images, fold, config):
@@ -701,136 +749,132 @@ def train_fold(tf, auc_class, args, frame, assignments, images, fold, config):
     validation = nonaug_sequence(
         tf, images[indices["val"]], labels[indices["val"]], args.batch_size
     )
-
-    model = load_and_validate_model(
-        tf, args.pretrained, on_off(args.mixed_precision)
-    )
-    model.layers[0].trainable = False
-    compile_model(tf, model, 1e-3, auc_class)
-    train_stage1, fit_stage1_kwargs = training_inputs(
-        tf,
-        args,
-        images[indices["train"]],
-        labels[indices["train"]],
-        fold,
-        args.seed + fold,
-    )
-    stage1_path = fold_dir / "stage1_best.h5"
-    history1 = model.fit(
-        train_stage1,
-        validation_data=validation,
-        epochs=args.epochs_stage1,
-        callbacks=callbacks(tf, stage1_path, args.patience),
-        class_weight=class_weights,
-        verbose=1,
-        **fit_stage1_kwargs
-    )
-    save_learning_curve(
-        history1,
-        fold_dir / "stage1_learning_curve.png",
-        "Fold {0:02d} stage 1".format(fold),
-    )
-    del model, train_stage1
-    gc.collect()
-
-    model = load_and_validate_model(
-        tf, stage1_path, on_off(args.mixed_precision)
-    )
-    model.layers[0].trainable = True
-    compile_model(tf, model, 1e-5, auc_class)
-    train_stage2, fit_stage2_kwargs = training_inputs(
-        tf,
-        args,
-        images[indices["train"]],
-        labels[indices["train"]],
-        fold,
-        args.seed + 1000 + fold,
-    )
-    stage2_path = fold_dir / "stage2_best.h5"
-    history2 = model.fit(
-        train_stage2,
-        validation_data=validation,
-        epochs=args.epochs_stage2,
-        callbacks=callbacks(tf, stage2_path, args.patience),
-        class_weight=class_weights,
-        verbose=1,
-        **fit_stage2_kwargs
-    )
-    save_learning_curve(
-        history2,
-        fold_dir / "stage2_learning_curve.png",
-        "Fold {0:02d} stage 2".format(fold),
-    )
-    del model, train_stage2
-    gc.collect()
-
-    stage1_model = load_and_validate_model(
-        tf, stage1_path, on_off(args.mixed_precision)
-    )
-    compile_model(tf, stage1_model, 1e-3, auc_class)
-    stage2_model = load_and_validate_model(
-        tf, stage2_path, on_off(args.mixed_precision)
-    )
-    compile_model(tf, stage2_model, 1e-5, auc_class)
-    stage1_validation = stage1_model.evaluate(
-        validation, verbose=0, return_dict=True
-    )
-    stage2_validation = stage2_model.evaluate(
-        validation, verbose=0, return_dict=True
-    )
-    stage1_auc = float(stage1_validation["auc"])
-    stage2_auc = float(stage2_validation["auc"])
-    if stage2_auc >= stage1_auc:
-        selected_stage = 2
-        model = stage2_model
-        del stage1_model
-    else:
-        selected_stage = 1
-        model = stage1_model
-        del stage2_model
-    print(
-        "Fold {0}: selected stage {1} by validation Keras AUC "
-        "(stage1={2:.6f}, stage2={3:.6f})".format(
-            fold, selected_stage, stage1_auc, stage2_auc
+    stage_paths = {0: (Path(args.pretrained), 1e-3)}
+    if not args.baseline_only:
+        model = load_and_validate_model(
+            tf, args.pretrained, on_off(args.mixed_precision)
         )
+        model.layers[0].trainable = False
+        compile_model(tf, model, 1e-3, auc_class)
+        train_stage1, fit_stage1_kwargs = training_inputs(
+            tf,
+            args,
+            images[indices["train"]],
+            labels[indices["train"]],
+            fold,
+            args.seed + fold,
+        )
+        stage1_path = fold_dir / "stage1_best.h5"
+        history1 = model.fit(
+            train_stage1,
+            validation_data=validation,
+            epochs=args.epochs_stage1,
+            callbacks=callbacks(tf, stage1_path, args.patience),
+            class_weight=class_weights,
+            verbose=1,
+            **fit_stage1_kwargs
+        )
+        save_learning_curve(
+            history1,
+            fold_dir / "stage1_learning_curve.png",
+            "Fold {0:02d} stage 1".format(fold),
+        )
+        del model, train_stage1
+        gc.collect()
+
+        model = load_and_validate_model(
+            tf, stage1_path, on_off(args.mixed_precision)
+        )
+        model.layers[0].trainable = True
+        compile_model(tf, model, 1e-5, auc_class)
+        train_stage2, fit_stage2_kwargs = training_inputs(
+            tf,
+            args,
+            images[indices["train"]],
+            labels[indices["train"]],
+            fold,
+            args.seed + 1000 + fold,
+        )
+        stage2_path = fold_dir / "stage2_best.h5"
+        history2 = model.fit(
+            train_stage2,
+            validation_data=validation,
+            epochs=args.epochs_stage2,
+            callbacks=callbacks(tf, stage2_path, args.patience),
+            class_weight=class_weights,
+            verbose=1,
+            **fit_stage2_kwargs
+        )
+        save_learning_curve(
+            history2,
+            fold_dir / "stage2_learning_curve.png",
+            "Fold {0:02d} stage 2".format(fold),
+        )
+        del model, train_stage2
+        gc.collect()
+        stage_paths.update(
+            {
+                1: (stage1_path, 1e-3),
+                2: (stage2_path, 1e-5),
+            }
+        )
+
+    stage_metrics = {}
+    stage_predictions = {}
+    validation_keras_auc = {}
+    for stage in sorted(stage_paths):
+        model_path, learning_rate = stage_paths[stage]
+        (
+            validation_keras_auc[stage],
+            stage_metrics[stage],
+            stage_predictions[stage],
+        ) = evaluate_stage_model(
+            tf,
+            auc_class,
+            args,
+            frame,
+            images,
+            indices,
+            fold,
+            stage,
+            model_path,
+            learning_rate,
+            validation,
+            fold_dir,
+        )
+
+    selected_stage = max(
+        validation_keras_auc,
+        key=lambda stage: (validation_keras_auc[stage], -stage),
     )
-    metrics = {}
-    metrics["val"] = predict_split(
-        tf,
-        model,
-        frame,
-        images,
-        indices["val"],
-        fold,
-        "val",
-        args,
-        fold_dir / "val_predictions.csv",
-    )
-    metrics["test"] = predict_split(
-        tf,
-        model,
-        frame,
-        images,
-        indices["test"],
-        fold,
-        "test",
-        args,
-        fold_dir / "test_predictions.csv",
+    for split in ("val", "test"):
+        stage_predictions[selected_stage][split].to_csv(
+            fold_dir / "{0}_predictions.csv".format(split),
+            index=False,
+            float_format="%.8f",
+        )
+    print(
+        "Fold {0}: selected stage {1} by validation Keras AUC: {2}".format(
+            fold,
+            selected_stage,
+            {
+                stage: round(value, 6)
+                for stage, value in validation_keras_auc.items()
+            },
+        )
     )
     payload = {
         "fold": fold,
         "selected_stage": selected_stage,
-        "validation_keras_auc": {
-            "stage1": stage1_auc,
-            "stage2": stage2_auc,
-        },
-        "metrics": metrics,
+        "validation_keras_auc": validation_keras_auc,
+        "stage_metrics": stage_metrics,
+        "selected_metrics": stage_metrics[selected_stage],
     }
     write_json(fold_dir / "fold_metrics.json", payload)
-    del model, validation
+    del validation
     tf.keras.backend.clear_session()
     gc.collect()
-    return metrics
+    return payload
 
 
 def main():
@@ -904,19 +948,25 @@ def main():
     scores = []
     for fold in folds:
         try:
-            metrics = train_fold(
+            result = train_fold(
                 tf, auc_class, args, frame, assignments, images, fold, configs[fold]
             )
-            for split in ("val", "test"):
-                row = {"fold": fold, "split": split}
-                row.update(
-                    {
-                        key: value
-                        for key, value in metrics[split].items()
-                        if key != "per_class_auc"
+            for stage, split_metrics in result["stage_metrics"].items():
+                for split in ("train", "val", "test"):
+                    row = {
+                        "fold": fold,
+                        "stage": int(stage),
+                        "split": split,
+                        "selected": int(stage) == int(result["selected_stage"]),
                     }
-                )
-                scores.append(row)
+                    row.update(
+                        {
+                            key: value
+                            for key, value in split_metrics[split].items()
+                            if key != "per_class_auc"
+                        }
+                    )
+                    scores.append(row)
             pd.DataFrame(scores).to_csv(
                 output_dir / "fold_scores.csv",
                 index=False,

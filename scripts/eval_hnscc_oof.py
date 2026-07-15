@@ -46,6 +46,12 @@ def parse_args():
         help="Case-level fold,case_id,role CSV used during training",
     )
     parser.add_argument("--output", required=True, help="Evaluation output directory")
+    parser.add_argument(
+        "--stage",
+        choices=("selected", "0", "1", "2"),
+        default="selected",
+        help="Prediction stage to evaluate (default: selected)",
+    )
     return parser.parse_args()
 
 
@@ -76,14 +82,19 @@ def load_assignments(path):
     return assignments
 
 
-def discover_prediction_files(pred_dir, n_folds=5):
+def discover_prediction_files(pred_dir, n_folds=5, stage="selected"):
     root = Path(pred_dir)
     if not root.is_dir():
         raise FileNotFoundError("Prediction directory does not exist: {0}".format(root))
-    paths = sorted(root.glob("fold*/test_predictions.csv"))
+    filename = (
+        "test_predictions.csv"
+        if stage == "selected"
+        else "stage{0}_test_predictions.csv".format(stage)
+    )
+    paths = sorted(root.glob("fold*/{0}".format(filename)))
     if not paths:
         raise FileNotFoundError(
-            "No fold*/test_predictions.csv files found under {0}".format(root)
+            "No fold*/{0} files found under {1}".format(filename, root)
         )
     by_fold = {}
     for path in paths:
@@ -114,9 +125,11 @@ def discover_prediction_files(pred_dir, n_folds=5):
     return [(fold, by_fold[fold]) for fold in range(n_folds)]
 
 
-def load_predictions(pred_dir, n_folds=5):
+def load_predictions(pred_dir, n_folds=5, stage="selected"):
     frames = []
-    for folder_fold, path in discover_prediction_files(pred_dir, n_folds=n_folds):
+    for folder_fold, path in discover_prediction_files(
+        pred_dir, n_folds=n_folds, stage=stage
+    ):
         frame = pd.read_csv(path)
         if frame.empty:
             raise ValueError("Prediction file contains no rows: {0}".format(path))
@@ -185,7 +198,9 @@ def main():
     manifest = load_hnscc_csv(manifest_path, expected_cases=10)
     assignments = load_assignments(fold_path)
     validate_fold_assignments(manifest, assignments, n_folds=5)
-    raw_predictions = load_predictions(args.pred_dir, n_folds=5)
+    raw_predictions = load_predictions(
+        args.pred_dir, n_folds=5, stage=args.stage
+    )
     predictions = validate_oof_predictions(
         manifest, assignments, raw_predictions, n_folds=5
     )
@@ -209,9 +224,13 @@ def main():
     slide_summary.to_csv(
         output / "slide_til_score_summary.csv", index=False, float_format="%.8f"
     )
+    json_summary = build_json_summary(
+        predictions, patch_summary, slide_summary
+    )
+    json_summary["stage"] = args.stage
     with (output / "eval_summary.json").open("w", encoding="utf-8") as handle:
         json.dump(
-            build_json_summary(predictions, patch_summary, slide_summary),
+            json_summary,
             handle,
             indent=2,
             sort_keys=True,

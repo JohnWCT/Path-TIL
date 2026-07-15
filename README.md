@@ -154,6 +154,8 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 
 `InceptionResNetV2_QuPath_2stage.py` 保留作為 patch-level baseline。HNSCC 泛化性實驗請使用新的 case-level GroupCV 流程，確保同一 case 的 patches 不會跨 train、validation、test：
 
+完整 5-fold baseline 結果、每 case TIL 誤差及後續優化計畫請見 [`docs/hnscc_groupcv_baseline_report.md`](docs/hnscc_groupcv_baseline_report.md)。
+
 ```text
 每個 fold：7 train cases + 1 validation case + 2 held-out test cases
 5 folds：每個 case 恰好作為 held-out test 一次
@@ -212,7 +214,24 @@ python3 scripts/train_hnscc_groupcv_irv2.py \
 '
 ```
 
-GPU smoke test（Stage 1/2 各 1 epoch）：
+先執行未 fine-tune 的 pretrained Stage 0 baseline；此模式不做 augmentation 或訓練，但會對該 fold 的 train、validation、held-out test 輸出 metrics 與 predictions：
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/train_hnscc_groupcv_irv2.py \
+  --csv qupath_dataset.csv \
+  --fold-csv folds_hnscc_group5.csv \
+  --pretrained best_InceptionResNetV2_model.h5 \
+  --output-dir results_groupcv_stage0 \
+  --fold 0 \
+  --hne-norm on \
+  --batch-size 16 \
+  --baseline-only
+'
+```
+
+GPU smoke test（Stage 1/2 各 2 epochs）：
 
 ```bash
 docker exec TIL bash -lc '
@@ -226,9 +245,9 @@ python3 scripts/train_hnscc_groupcv_irv2.py \
   --aug heavy \
   --hne-norm on \
   --class-weight on \
-  --epochs-stage1 1 \
-  --epochs-stage2 1 \
-  --batch-size 32
+  --epochs-stage1 2 \
+  --epochs-stage2 2 \
+  --batch-size 16
 '
 ```
 
@@ -255,7 +274,7 @@ python3 scripts/train_hnscc_groupcv_irv2.py \
 '
 ```
 
-每個 `foldXX/` 會輸出 Stage 1/2 最佳模型、學習曲線、設定、metrics，以及 validation/test 逐 patch predictions；held-out test 僅在該 fold 訓練完成後評估一次。
+每個 `foldXX/` 會輸出 Stage 1/2 最佳模型、學習曲線與設定。所有訓練完成後才載入 Stage 0/1/2 checkpoint，分別輸出 train/validation/held-out test metrics 及 `stage{0,1,2}_{split}_predictions.csv`；`test_predictions.csv` 則指向只依 validation AUC 選出的 stage，供預設 OOF 評估使用。test 不參與 checkpoint、early stopping、降 LR 或 stage 選擇。
 
 ### 5. OOF 與 slide-level TIL 評估
 
@@ -266,9 +285,12 @@ python3 scripts/eval_hnscc_oof.py \
   --pred-dir results_groupcv_irv2 \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
+  --stage selected \
   --output results_groupcv_irv2/oof_summary
 '
 ```
+
+`--stage` 可設為 `selected`、`0`、`1` 或 `2`，因此可分別產生 Stage 0/1/2 OOF 結果，比較 fine-tuning 前後的 patch-level AUC 與 slide-level TIL MAE。
 
 輸出：
 
