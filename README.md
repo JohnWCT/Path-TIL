@@ -45,10 +45,16 @@
 
 ```bash
 docker build -f dockerfile -t path-til .
-docker run -it --gpus all -v "$(pwd)":/workspace path-til
+docker run -it --gpus all \
+  --name TIL \
+  --ipc=host \
+  -v "$(pwd)":/workspace/Path_TIL \
+  -v /path/to/dataset:/workspace/dataset \
+  -w /workspace/Path_TIL \
+  path-til
 ```
 
-容器預設進入 `/bin/bash`，可直接在終端機執行訓練或推論腳本。
+容器預設進入 `/bin/bash`。若既有容器將整個專案直接掛到 `/workspace`，請將以下指令中的 `/workspace/Path_TIL` 改為 `/workspace`；資料集仍建議獨立掛載至 `/workspace/dataset`。
 
 ## 安裝
 
@@ -122,9 +128,18 @@ from zipfile import ZipFile
 
 root = Path('/workspace/dataset')
 archives = sorted(root.glob('*.zip'))
+if not archives:
+    raise FileNotFoundError(f'No ZIP archives found in {root}')
 
 def extract(archive):
     with ZipFile(archive) as z:
+        bad = z.testzip()
+        if bad is not None:
+            raise RuntimeError(f'Corrupted file in {archive.name}: {bad}')
+        for member in z.namelist():
+            parts = Path(member).parts
+            if Path(member).is_absolute() or '..' in parts:
+                raise RuntimeError(f'Unsafe path in {archive.name}: {member}')
         z.extractall(root)
     print(f'Extracted: {archive.name}')
 
@@ -133,7 +148,151 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 "
 ```
 
-解壓前應先用 `ZipFile.testzip()` 驗證壓縮檔，並確認成員路徑不含絕對路徑或 `..`，避免損壞檔案及路徑穿越。若重複執行，現有同名檔案可能被覆寫。
+此程式會先驗證 ZIP CRC 與成員路徑，再以最多 3 個 worker 平行解壓。若重複執行，現有同名檔案可能被覆寫。
+
+## HNSCC case-level GroupCV
+
+`InceptionResNetV2_QuPath_2stage.py` 保留作為 patch-level baseline。HNSCC 泛化性實驗請使用新的 case-level GroupCV 流程，確保同一 case 的 patches 不會跨 train、validation、test：
+
+```text
+每個 fold：7 train cases + 1 validation case + 2 held-out test cases
+5 folds：每個 case 恰好作為 held-out test 一次
+模型選擇：只使用 validation AUC
+最終評估：合併 5 folds 的 held-out test predictions
+```
+
+### 1. 建立 QuPath manifest
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 prepare_dataset_csv.py \
+  --preset qupath \
+  --qupath-dir /workspace/dataset/QuPathOutput \
+  --output /workspace/Path_TIL/qupath_dataset.csv
+'
+```
+
+### 2. 建立 deterministic GroupCV folds
+
+程式會枚舉 10 cases 的 test pair 分組，近似平衡每 fold 的三類 patches 與總大小；validation case 也會以全域搜尋選取，且各 fold 不重複。
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/make_hnscc_group_folds.py \
+  --csv qupath_dataset.csv \
+  --output folds_hnscc_group5.csv \
+  --n-folds 5 \
+  --seed 42
+'
+```
+
+輸出：
+
+```text
+folds_hnscc_group5.csv   # fold,case_id,role
+folds_hnscc_group5.json  # 每 fold cases、class counts 與搜尋 objective
+```
+
+### 3. Dry-run 與單 fold smoke test
+
+Dry-run 只驗證 manifest、影像路徑、folds、class weights 與輸出設定，不載入 TensorFlow：
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/train_hnscc_groupcv_irv2.py \
+  --csv qupath_dataset.csv \
+  --fold-csv folds_hnscc_group5.csv \
+  --pretrained best_InceptionResNetV2_model.h5 \
+  --output-dir results_groupcv_dry_run \
+  --fold 0 \
+  --dry-run
+'
+```
+
+GPU smoke test（Stage 1/2 各 1 epoch）：
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/train_hnscc_groupcv_irv2.py \
+  --csv qupath_dataset.csv \
+  --fold-csv folds_hnscc_group5.csv \
+  --pretrained best_InceptionResNetV2_model.h5 \
+  --output-dir results_groupcv_smoke \
+  --fold 0 \
+  --aug heavy \
+  --hne-norm on \
+  --class-weight on \
+  --epochs-stage1 1 \
+  --epochs-stage2 1 \
+  --batch-size 32
+'
+```
+
+腳本使用 GPU memory growth；`none/light/medium` 使用 `tf.data`、`AUTOTUNE` 與 prefetch，`heavy` 使用 imgaug `Sequence`。GPU 使用率取決於影像 I/O、H&E normalization、augmentation 與 batch size，無法保證固定比例；請用 `nvidia-smi` 觀察後逐步調高 `--batch-size` 或 `--fit-workers`，避免 OOM。
+
+### 4. 完整 5-fold 訓練
+
+省略 `--fold` 即依序執行全部 folds：
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/train_hnscc_groupcv_irv2.py \
+  --csv qupath_dataset.csv \
+  --fold-csv folds_hnscc_group5.csv \
+  --pretrained best_InceptionResNetV2_model.h5 \
+  --output-dir results_groupcv_irv2 \
+  --aug heavy \
+  --hne-norm on \
+  --class-weight on \
+  --epochs-stage1 30 \
+  --epochs-stage2 30 \
+  --batch-size 32
+'
+```
+
+每個 `foldXX/` 會輸出 Stage 1/2 最佳模型、學習曲線、設定、metrics，以及 validation/test 逐 patch predictions；held-out test 僅在該 fold 訓練完成後評估一次。
+
+### 5. OOF 與 slide-level TIL 評估
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 scripts/eval_hnscc_oof.py \
+  --pred-dir results_groupcv_irv2 \
+  --csv qupath_dataset.csv \
+  --fold-csv folds_hnscc_group5.csv \
+  --output results_groupcv_irv2/oof_summary
+'
+```
+
+輸出：
+
+```text
+oof_predictions.csv           # 5 folds 的完整 held-out predictions
+patch_auc_summary.csv         # positive-vs-rest 與 macro/weighted OVR 等
+slide_til_score_summary.csv   # 每 case GT/Pred TIL、MAE、相關係數
+eval_summary.json             # 主要結果摘要
+```
+
+slide-level TIL score 使用 hard prediction：
+
+\[
+\text{TIL score} = \frac{\text{Positive}}{\text{Positive}+\text{Negative}}
+\]
+
+### 6. 測試
+
+```bash
+docker exec TIL bash -lc '
+cd /workspace/Path_TIL
+python3 -m unittest discover -s tests -v
+'
+```
 
 ## 快速開始
 
@@ -201,6 +360,14 @@ Path_TIL/
 ├── InceptionResNetV2_*.py   # 訓練 / CV / 測試
 ├── inference_*.py
 ├── aggregate_til_scores.py
+├── path_til/
+│   └── hnscc.py             # GroupCV、OOF 與 TIL 共用邏輯
+├── scripts/
+│   ├── make_hnscc_group_folds.py
+│   ├── train_hnscc_groupcv_irv2.py
+│   └── eval_hnscc_oof.py
+├── tests/
+│   └── test_hnscc_groupcv.py
 ├── dockerfile
 ├── LICENSE
 └── README.md

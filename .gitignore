@@ -70,6 +70,7 @@ qupath_results*/
 
 # CSV outputs (regenerate via scripts)
 *.csv
+folds_hnscc_group*.json
 
 # Docker build context artifacts (optional local mounts)
 /workspace/
