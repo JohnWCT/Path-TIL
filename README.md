@@ -65,6 +65,76 @@ pip install openslide-python==1.2.0 opencv-python-headless==4.7.0.72 \
 
 請從 [TILScout](https://github.com/huibozh/TILScout) 取得 `best_InceptionResNetV2_model.h5`，置於專案根目錄（`.gitignore` 已排除大型 `.h5` 檔，請勿提交至 Git）。
 
+## 輸入資料集
+
+資料集壓縮檔放在 `/workspace/dataset/`。解壓後保留原始 ZIP，並在相同目錄產生 `train/`、`test/`、`Testset/` 與 `QuPathOutput/`：
+
+```text
+dataset/
+├── Dateset_TCGA.zip                  # TCGA 訓練／內部測試集壓縮檔
+├── Testset.zip                       # 外部測試集壓縮檔
+├── tvgh_hnscc_TIL_patch_label.zip    # TVGH HNSCC QuPath 標註壓縮檔
+│
+├── train/                            # TCGA 訓練集，共 72,272 個 .tif patch
+│   ├── A_positive/                   # 18,071
+│   ├── B_negative/                   # 26,251
+│   └── C_other/                      # 27,950
+├── test/                             # TCGA 內部測試集，共 18,216 個 .tif patch
+│   ├── A_positive/                   # 4,031
+│   ├── B_negative/                   # 7,974
+│   └── C_other/                      # 6,211
+│
+├── Testset/                          # 外部測試集，共 9,000 個 .tif patch
+│   ├── CPTAC_LUAD/                   # 3,000
+│   │   ├── A_Positive/               # 224
+│   │   ├── B_Negative/               # 1,357
+│   │   └── C_Other/                  # 1,419
+│   ├── CPTAC_LUSC/                   # 3,000
+│   │   ├── A_Positive/               # 291
+│   │   ├── B_Negative/               # 1,769
+│   │   └── C_Other/                  # 940
+│   └── RUMC-BRCA/                    # 3,000
+│       ├── A_Positive/               # 162
+│       ├── B_Negative/               # 1,219
+│       └── C_Other/                  # 1,619
+│
+└── QuPathOutput/                     # TVGH HNSCC，共 10 個 case
+    └── HXXXX/
+        ├── labeled_detections.csv    # QuPath 標註／偵測資料
+        └── patches/
+            ├── TIL-positive/         # 模型類別 positive
+            ├── TIL-negative/         # 模型類別 negative
+            ├── Non-tumor/            # 映射為模型類別 other
+            └── BenignOrDysplasia/    # 若該 case 存在，映射為 other
+```
+
+TVGH HNSCC 的 10 個 case 為 `H0002`、`H0003`、`H0005`、`H0006`、`H0007`、`H0008`、`H0013`、`H0018`、`H0041`、`H0103`；合計 5,492 個 PNG patch 與 10 個 CSV。解壓後所有資料集合計 104,990 個檔案（99,488 個 TIF、5,492 個 PNG、10 個 CSV）。
+
+### 在既有 Docker 容器解壓縮
+
+以下指令在 `TIL` 容器內以最多 3 個 worker 平行解壓三個互不相依的 ZIP。解壓縮是 CPU／儲存裝置 I/O 工作，不使用 GPU：
+
+```bash
+docker exec TIL python3 -c "
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from zipfile import ZipFile
+
+root = Path('/workspace/dataset')
+archives = sorted(root.glob('*.zip'))
+
+def extract(archive):
+    with ZipFile(archive) as z:
+        z.extractall(root)
+    print(f'Extracted: {archive.name}')
+
+with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
+    list(pool.map(extract, archives))
+"
+```
+
+解壓前應先用 `ZipFile.testzip()` 驗證壓縮檔，並確認成員路徑不含絕對路徑或 `..`，避免損壞檔案及路徑穿越。若重複執行，現有同名檔案可能被覆寫。
+
 ## 快速開始
 
 ### 1. WSI TIL 推論（建議使用強化版）
