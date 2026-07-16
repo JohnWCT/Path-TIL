@@ -286,18 +286,23 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
-    try:
-        for gpu in tf.config.list_physical_devices("GPU"):
-            tf.config.experimental.set_memory_growth(gpu, True)
-    except Exception as error:  # noqa: BLE001
-        print("GPU memory growth warning: {0}".format(error), file=sys.stderr)
+    if hasattr(base, "configure_tensorflow"):
+        tf = base.configure_tensorflow(args)
+    else:
+        try:
+            for gpu in tf.config.list_physical_devices("GPU"):
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception as error:  # noqa: BLE001
+            print(
+                "GPU memory growth warning: {0}".format(error), file=sys.stderr
+            )
 
     images, preprocessing_report = base.load_all_images(
         frame["image_path"].tolist(),
         base.on_off(args.hne_norm),
         args.image_workers,
     )
-    auc_class = base.build_sparse_multiclass_auc(tf)
+    auc_class = base.sparse_auc_class(tf)
     for fold in folds:
         config = base.make_fold_config(args, frame, assignments, fold, folds)
         config["method"] = method
