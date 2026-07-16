@@ -1,0 +1,10 @@
+name: method_threshold_til
+method_type: til_estimator
+hne_norm: off
+aug: heavy
+class_weight: on
+loss: weighted_ce
+sampler: random
+stage_policy: validation_multiclass_auc
+til_estimator: threshold_hard
+notes: Validation-tuned positive probability threshold for hard TIL

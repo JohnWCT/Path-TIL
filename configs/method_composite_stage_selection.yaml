@@ -1,0 +1,10 @@
+name: method_composite_stage_selection
+method_type: stage_policy
+hne_norm: off
+aug: heavy
+class_weight: on
+loss: weighted_ce
+sampler: random
+stage_policy: composite_positive_macro
+til_estimator: hard_raw
+notes: Offline stage reselection on existing candidate predictions

@@ -1,0 +1,14 @@
+name: method_logit_adjusted_ce
+method_type: loss
+hne_norm: off
+aug: heavy
+class_weight: off
+loss: logit_adjusted_ce
+sampler: random
+stage_policy: validation_multiclass_auc
+til_estimator: hard_raw
+epochs_stage1: 30
+epochs_stage2: 30
+batch_size: 32
+seed: 42
+notes: Logit-adjusted CE; class_weight off because adjustment uses train frequencies

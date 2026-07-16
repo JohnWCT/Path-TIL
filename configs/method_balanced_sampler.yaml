@@ -1,0 +1,14 @@
+name: method_balanced_sampler
+method_type: sampler
+hne_norm: off
+aug: heavy
+class_weight: off
+loss: sparse_ce
+sampler: class_balanced
+stage_policy: validation_multiclass_auc
+til_estimator: hard_raw
+epochs_stage1: 30
+epochs_stage2: 30
+batch_size: 32
+seed: 42
+notes: Class-balanced sampler replaces class weights

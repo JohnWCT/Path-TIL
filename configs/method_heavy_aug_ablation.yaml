@@ -1,0 +1,15 @@
+name: method_heavy_aug_ablation
+method_type: augmentation_ablation
+hne_norm: off
+aug: heavy
+class_weight: on
+loss: weighted_ce
+sampler: random
+stage_policy: validation_multiclass_auc
+til_estimator: hard_raw
+aug_components:
+  - geometric
+  - hed
+  - blur_noise
+  - cutout
+notes: Component-wise heavy augmentation ablation root config

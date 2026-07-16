@@ -158,6 +158,8 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 
 - [5-fold baseline、每 case TIL 誤差與優化計畫](docs/hnscc_groupcv_baseline_report.md)
 - [H&E、augmentation、class weight、stage、error audit 與 TIL calibration 測試 1–6](docs/hnscc_groupcv_optimization_report.md)
+- [方法學優化工作流程（loss / sampler / stage / threshold）](docs/hnscc_methodology_optimization.md)
+- [方法學比較表](docs/hnscc_methodology_comparison_table.md)
 
 ```text
 每個 fold：7 train cases + 1 validation case + 2 held-out test cases
