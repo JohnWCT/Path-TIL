@@ -770,14 +770,48 @@ def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
     )
 
 
+def _til_correlation_summary(frame, prediction_column):
+    valid = frame[
+        np.isfinite(frame["gt_til_score"])
+        & np.isfinite(frame[prediction_column])
+    ]
+    n_valid = int(len(valid))
+    status = "ok"
+    spearman = np.nan
+    pearson = np.nan
+    if n_valid == 0:
+        status = "no_valid_slides"
+    elif n_valid < 2:
+        status = "insufficient_pairs"
+    else:
+        gt_values = valid["gt_til_score"].to_numpy(dtype=np.float64)
+        pred_values = valid[prediction_column].to_numpy(dtype=np.float64)
+        if np.ptp(gt_values) == 0.0 or np.ptp(pred_values) == 0.0:
+            status = "constant_input"
+        else:
+            pearson = float(np.corrcoef(gt_values, pred_values)[0, 1])
+            gt_rank = pd.Series(gt_values).rank(method="average").to_numpy()
+            pred_rank = pd.Series(pred_values).rank(method="average").to_numpy()
+            spearman = float(np.corrcoef(gt_rank, pred_rank)[0, 1])
+    return {
+        "valid": valid,
+        "n_valid": n_valid,
+        "status": status,
+        "spearman": spearman,
+        "pearson": pearson,
+    }
+
+
 def slide_til_score_summary(predictions):
-    """Compute per-case hard-label TIL scores and overall error/correlation."""
+    """Compute per-case hard and probability-weighted TIL scores."""
     required = {"case_id", "fold", "y_true_label", "y_pred_label"}
     missing = sorted(required - set(predictions.columns))
     if missing:
         raise ValueError("Slide TIL input is missing columns: {0}".format(missing))
     if predictions.empty:
         raise ValueError("Slide TIL input contains no rows")
+    probability_columns = {"prob_positive", "prob_negative"}
+    has_probabilities = probability_columns.issubset(predictions.columns)
 
     rows = []
     for case_id, group in predictions.groupby("case_id", sort=True):
@@ -802,7 +836,25 @@ def slide_til_score_summary(predictions):
             if pred_denominator
             else np.nan
         )
+        if has_probabilities:
+            soft_positive = float(
+                pd.to_numeric(group["prob_positive"], errors="coerce").sum()
+            )
+            soft_negative = float(
+                pd.to_numeric(group["prob_negative"], errors="coerce").sum()
+            )
+            soft_denominator = soft_positive + soft_negative
+            soft_score = (
+                soft_positive / soft_denominator
+                if soft_denominator > 0 and np.isfinite(soft_denominator)
+                else np.nan
+            )
+        else:
+            soft_positive = np.nan
+            soft_negative = np.nan
+            soft_score = np.nan
         valid = np.isfinite(gt_score) and np.isfinite(pred_score)
+        soft_valid = np.isfinite(gt_score) and np.isfinite(soft_score)
         rows.append(
             {
                 "row_type": "case",
@@ -818,38 +870,31 @@ def slide_til_score_summary(predictions):
                 "gt_til_score": gt_score,
                 "pred_til_score": pred_score,
                 "abs_error": abs(gt_score - pred_score) if valid else np.nan,
+                "soft_positive_sum": soft_positive,
+                "soft_negative_sum": soft_negative,
+                "soft_pred_til_score": soft_score,
+                "soft_abs_error": (
+                    abs(gt_score - soft_score) if soft_valid else np.nan
+                ),
                 "n_valid_slides": np.nan,
                 "mae": np.nan,
                 "median_ae": np.nan,
                 "spearman_r": np.nan,
                 "pearson_r": np.nan,
+                "soft_mae": np.nan,
+                "soft_median_ae": np.nan,
+                "soft_spearman_r": np.nan,
+                "soft_pearson_r": np.nan,
+                "soft_status": "ok" if soft_valid else "unavailable",
                 "status": "ok" if valid else "zero_denominator",
             }
         )
 
     case_frame = pd.DataFrame(rows)
-    valid = case_frame[
-        np.isfinite(case_frame["gt_til_score"])
-        & np.isfinite(case_frame["pred_til_score"])
-    ]
-    n_valid = int(len(valid))
-    status = "ok"
-    spearman = np.nan
-    pearson = np.nan
-    if n_valid == 0:
-        status = "no_valid_slides"
-    elif n_valid < 2:
-        status = "insufficient_pairs"
-    else:
-        gt_values = valid["gt_til_score"].to_numpy(dtype=np.float64)
-        pred_values = valid["pred_til_score"].to_numpy(dtype=np.float64)
-        if np.ptp(gt_values) == 0.0 or np.ptp(pred_values) == 0.0:
-            status = "constant_input"
-        else:
-            pearson = float(np.corrcoef(gt_values, pred_values)[0, 1])
-            gt_rank = pd.Series(gt_values).rank(method="average").to_numpy()
-            pred_rank = pd.Series(pred_values).rank(method="average").to_numpy()
-            spearman = float(np.corrcoef(gt_rank, pred_rank)[0, 1])
+    hard = _til_correlation_summary(case_frame, "pred_til_score")
+    soft = _til_correlation_summary(case_frame, "soft_pred_til_score")
+    valid = hard["valid"]
+    soft_valid = soft["valid"]
     overall = {
         "row_type": "overall",
         "case_id": "",
@@ -864,14 +909,101 @@ def slide_til_score_summary(predictions):
         "gt_til_score": np.nan,
         "pred_til_score": np.nan,
         "abs_error": np.nan,
-        "n_valid_slides": n_valid,
-        "mae": float(valid["abs_error"].mean()) if n_valid else np.nan,
-        "median_ae": float(valid["abs_error"].median()) if n_valid else np.nan,
-        "spearman_r": spearman,
-        "pearson_r": pearson,
-        "status": status,
+        "soft_positive_sum": float(case_frame["soft_positive_sum"].sum()),
+        "soft_negative_sum": float(case_frame["soft_negative_sum"].sum()),
+        "soft_pred_til_score": np.nan,
+        "soft_abs_error": np.nan,
+        "n_valid_slides": hard["n_valid"],
+        "mae": (
+            float(valid["abs_error"].mean())
+            if hard["n_valid"]
+            else np.nan
+        ),
+        "median_ae": (
+            float(valid["abs_error"].median())
+            if hard["n_valid"]
+            else np.nan
+        ),
+        "spearman_r": hard["spearman"],
+        "pearson_r": hard["pearson"],
+        "soft_mae": (
+            float(soft_valid["soft_abs_error"].mean())
+            if soft["n_valid"]
+            else np.nan
+        ),
+        "soft_median_ae": (
+            float(soft_valid["soft_abs_error"].median())
+            if soft["n_valid"]
+            else np.nan
+        ),
+        "soft_spearman_r": soft["spearman"],
+        "soft_pearson_r": soft["pearson"],
+        "soft_status": soft["status"],
+        "status": hard["status"],
     }
     return pd.concat(
         [case_frame, pd.DataFrame([overall], columns=case_frame.columns)],
         ignore_index=True,
     )
+
+
+def cross_fitted_linear_til_calibration(slide_summary):
+    """Leave-one-case-out linear calibration for hard and soft TIL scores."""
+    cases = slide_summary[slide_summary["row_type"] == "case"].copy()
+    required = {
+        "case_id",
+        "gt_til_score",
+        "pred_til_score",
+        "soft_pred_til_score",
+    }
+    missing = sorted(required - set(cases.columns))
+    if missing:
+        raise ValueError("Calibration input is missing columns: {0}".format(missing))
+    if len(cases) < 3:
+        raise ValueError("Calibration requires at least three cases")
+
+    rows = []
+    for index, target in cases.iterrows():
+        train = cases.drop(index=index)
+        row = {
+            "case_id": str(target["case_id"]),
+            "gt_til_score": float(target["gt_til_score"]),
+        }
+        for prefix, column in (
+            ("hard", "pred_til_score"),
+            ("soft", "soft_pred_til_score"),
+        ):
+            fit = train[
+                np.isfinite(train["gt_til_score"])
+                & np.isfinite(train[column])
+            ]
+            raw = float(target[column])
+            if (
+                len(fit) < 2
+                or not np.isfinite(raw)
+                or np.ptp(fit[column].to_numpy(dtype=np.float64)) == 0.0
+            ):
+                calibrated = np.nan
+                slope = np.nan
+                intercept = np.nan
+                status = "insufficient_calibration_data"
+            else:
+                slope, intercept = np.polyfit(
+                    fit[column].to_numpy(dtype=np.float64),
+                    fit["gt_til_score"].to_numpy(dtype=np.float64),
+                    1,
+                )
+                calibrated = float(np.clip(slope * raw + intercept, 0.0, 1.0))
+                status = "ok"
+            row["{0}_raw".format(prefix)] = raw
+            row["{0}_calibrated".format(prefix)] = calibrated
+            row["{0}_slope".format(prefix)] = slope
+            row["{0}_intercept".format(prefix)] = intercept
+            row["{0}_abs_error".format(prefix)] = (
+                abs(float(target["gt_til_score"]) - calibrated)
+                if np.isfinite(calibrated)
+                else np.nan
+            )
+            row["{0}_status".format(prefix)] = status
+        rows.append(row)
+    return pd.DataFrame(rows)

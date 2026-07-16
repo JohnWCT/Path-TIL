@@ -18,6 +18,8 @@
 4. 依 validation AUC 選 stage 的模型具有最高 accuracy（0.7152）與最低 TIL MAE（0.1619），但 positive AUC（0.8199）低於固定使用 Stage 2。
 5. 目前 TIL 誤差主要不是系統性低估，而是在多數 cases 上高估；H0008、H0013、H0006 的 absolute error 最大。
 
+本報告所規劃的 A1–A3 與 B1–B3 已完成；結果請見 [`hnscc_groupcv_optimization_report.md`](hnscc_groupcv_optimization_report.md)。
+
 ## 2. 資料與標籤
 
 輸入 manifest：`qupath_dataset.csv`

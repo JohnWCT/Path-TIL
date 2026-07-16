@@ -19,6 +19,7 @@ from path_til.hnscc import (  # noqa: E402
     ASSIGNMENT_COLUMNS,
     LABELS,
     PREDICTION_COLUMNS,
+    cross_fitted_linear_til_calibration,
     load_hnscc_csv,
     patch_metric_summary,
     slide_til_score_summary,
@@ -181,9 +182,56 @@ def build_json_summary(predictions, patch_summary, slide_summary):
             "median_ae": json_number(overall["median_ae"]),
             "spearman_r": json_number(overall["spearman_r"]),
             "pearson_r": json_number(overall["pearson_r"]),
+            "soft_mae": json_number(overall["soft_mae"]),
+            "soft_median_ae": json_number(overall["soft_median_ae"]),
+            "soft_spearman_r": json_number(overall["soft_spearman_r"]),
+            "soft_pearson_r": json_number(overall["soft_pearson_r"]),
+            "soft_status": overall["soft_status"],
             "status": overall["status"],
         },
     }
+
+
+def calibration_summary(calibration):
+    result = {}
+    gt = calibration["gt_til_score"].to_numpy(dtype=np.float64)
+    for prefix in ("hard", "soft"):
+        calibrated = calibration[
+            "{0}_calibrated".format(prefix)
+        ].to_numpy(dtype=np.float64)
+        valid = np.isfinite(gt) & np.isfinite(calibrated)
+        if not valid.any():
+            result[prefix] = {
+                "n_cases": 0,
+                "mae": None,
+                "pearson_r": None,
+                "spearman_r": None,
+                "status": "no_valid_cases",
+            }
+            continue
+        error = np.abs(gt[valid] - calibrated[valid])
+        pearson = None
+        spearman = None
+        status = "ok"
+        if valid.sum() < 2:
+            status = "insufficient_pairs"
+        elif np.ptp(gt[valid]) == 0.0 or np.ptp(calibrated[valid]) == 0.0:
+            status = "constant_input"
+        else:
+            pearson = float(np.corrcoef(gt[valid], calibrated[valid])[0, 1])
+            gt_rank = pd.Series(gt[valid]).rank(method="average").to_numpy()
+            pred_rank = pd.Series(calibrated[valid]).rank(
+                method="average"
+            ).to_numpy()
+            spearman = float(np.corrcoef(gt_rank, pred_rank)[0, 1])
+        result[prefix] = {
+            "n_cases": int(valid.sum()),
+            "mae": float(error.mean()),
+            "pearson_r": pearson,
+            "spearman_r": spearman,
+            "status": status,
+        }
+    return result
 
 
 def main():
@@ -212,6 +260,7 @@ def main():
         predictions["y_true_idx"].to_numpy(dtype=np.int64), probabilities
     )
     slide_summary = slide_til_score_summary(predictions)
+    calibration = cross_fitted_linear_til_calibration(slide_summary)
 
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
@@ -224,10 +273,18 @@ def main():
     slide_summary.to_csv(
         output / "slide_til_score_summary.csv", index=False, float_format="%.8f"
     )
+    calibration.to_csv(
+        output / "slide_til_calibration_summary.csv",
+        index=False,
+        float_format="%.8f",
+    )
     json_summary = build_json_summary(
         predictions, patch_summary, slide_summary
     )
     json_summary["stage"] = args.stage
+    json_summary["cross_fitted_linear_calibration"] = calibration_summary(
+        calibration
+    )
     with (output / "eval_summary.json").open("w", encoding="utf-8") as handle:
         json.dump(
             json_summary,

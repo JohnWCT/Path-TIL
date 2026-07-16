@@ -11,6 +11,7 @@ from path_til.hnscc import (
     PREDICTION_COLUMNS,
     balanced_class_weights,
     build_fold_assignments,
+    cross_fitted_linear_til_calibration,
     load_hnscc_csv,
     patch_metric_summary,
     slide_til_score_summary,
@@ -244,6 +245,47 @@ class SlideTilSummaryTests(unittest.TestCase):
         self.assertEqual(overall["status"], "constant_input")
         self.assertTrue(np.isnan(overall["pearson_r"]))
         self.assertTrue(np.isnan(overall["spearman_r"]))
+
+    def test_computes_probability_weighted_til_score(self):
+        predictions = pd.DataFrame(
+            [
+                ("case_a", 0, "positive", "positive", 0.8, 0.1),
+                ("case_a", 0, "negative", "other", 0.2, 0.4),
+            ],
+            columns=(
+                "case_id",
+                "fold",
+                "y_true_label",
+                "y_pred_label",
+                "prob_positive",
+                "prob_negative",
+            ),
+        )
+        summary = slide_til_score_summary(predictions)
+        case_row = summary[summary["row_type"] == "case"].iloc[0]
+        self.assertAlmostEqual(case_row["soft_pred_til_score"], 1.0 / 1.5)
+        self.assertAlmostEqual(case_row["soft_abs_error"], 1.0 / 6.0)
+
+    def test_cross_fitted_linear_calibration(self):
+        cases = pd.DataFrame(
+            {
+                "row_type": ["case"] * 5,
+                "case_id": ["a", "b", "c", "d", "e"],
+                "gt_til_score": [0.1, 0.2, 0.3, 0.4, 0.5],
+                "pred_til_score": [0.2, 0.4, 0.6, 0.8, 1.0],
+                "soft_pred_til_score": [0.15, 0.25, 0.35, 0.45, 0.55],
+            }
+        )
+        calibrated = cross_fitted_linear_til_calibration(cases)
+        self.assertEqual(len(calibrated), 5)
+        self.assertTrue((calibrated["hard_status"] == "ok").all())
+        self.assertTrue((calibrated["soft_status"] == "ok").all())
+        self.assertTrue(
+            np.allclose(
+                calibrated["hard_calibrated"],
+                calibrated["gt_til_score"],
+            )
+        )
 
 
 class OofValidationTests(unittest.TestCase):

@@ -154,7 +154,10 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 
 `InceptionResNetV2_QuPath_2stage.py` 保留作為 patch-level baseline。HNSCC 泛化性實驗請使用新的 case-level GroupCV 流程，確保同一 case 的 patches 不會跨 train、validation、test：
 
-完整 5-fold baseline 結果、每 case TIL 誤差及後續優化計畫請見 [`docs/hnscc_groupcv_baseline_report.md`](docs/hnscc_groupcv_baseline_report.md)。
+完整報告：
+
+- [5-fold baseline、每 case TIL 誤差與優化計畫](docs/hnscc_groupcv_baseline_report.md)
+- [H&E、augmentation、class weight、stage、error audit 與 TIL calibration 測試 1–6](docs/hnscc_groupcv_optimization_report.md)
 
 ```text
 每個 fold：7 train cases + 1 validation case + 2 held-out test cases
@@ -290,7 +293,7 @@ python3 scripts/eval_hnscc_oof.py \
 '
 ```
 
-`--stage` 可設為 `selected`、`0`、`1` 或 `2`，因此可分別產生 Stage 0/1/2 OOF 結果，比較 fine-tuning 前後的 patch-level AUC 與 slide-level TIL MAE。
+`--stage` 可設為 `selected`、`0`、`1` 或 `2`，因此可分別產生 Stage 0/1/2 OOF 結果，比較 fine-tuning 前後的 patch-level AUC 與 slide-level TIL MAE。評估同時輸出 hard/soft TIL，以及不使用目標 case 擬合參數的 leave-one-case-out 線性 calibration 結果。
 
 輸出：
 
