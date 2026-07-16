@@ -280,15 +280,92 @@ Validation stage 選擇：
 
 ## 11. B3：hard/soft TIL 與 calibration
 
-定義：
+### Slide-level TIL 與 MAE 定義
+
+本報告的 patch 任務是三分類（`positive` / `negative` / `other`），但 slide-level 評估用的是 **連續 TIL score**，不是 patch accuracy。流程分兩層：
+
+1. **Patch 分類**：每個 patch 預測類別或輸出機率 → 用 Accuracy、F1、AUC 等評估。
+2. **Slide TIL score**：同一 `case_id` 的所有 held-out test patches 彙總成一個 0～1 的分數 → 與 GT TIL 比較 → 計算 MAE。
+
+`other` 類別在 TIL 定義中 **不進分子、也不進分母**，與 TILScout 一致，以便與舊流程比較。
+
+#### GT TIL（Ground Truth，hard／soft 共用）
+
+對單一 case 的 QuPath 標註 patches，先數各類 patch 數：
 
 ```text
-hard TIL = predicted Positive count /
-           (predicted Positive count + predicted Negative count)
-
-soft TIL = sum(prob_positive) /
-           (sum(prob_positive) + sum(prob_negative))
+GT_Positive = 該 case 中 label = positive 的 patch 數
+GT_Negative = 該 case 中 label = negative 的 patch 數
+GT_Other    = 該 case 中 label = other 的 patch 數（不參與 TIL）
 ```
+
+GT TIL 定義：
+
+```text
+GT_TIL = GT_Positive / (GT_Positive + GT_Negative)
+```
+
+- 分母只含 positive 與 negative patches。
+- 若 `GT_Positive + GT_Negative = 0`，該 case 無法定義 TIL（`status = zero_denominator`），不納入 MAE 平均。
+
+#### Hard Pred TIL（硬分類比例）
+
+模型對每個 patch 輸出 argmax 類別後，再在同一 case 內計數：
+
+```text
+Pred_Positive = 預測為 positive 的 patch 數
+Pred_Negative = 預測為 negative 的 patch 數
+
+Hard_Pred_TIL = Pred_Positive / (Pred_Positive + Pred_Negative)
+```
+
+- 同樣排除 `other`。
+- 若預測的 positive + negative 為 0，該 case 無效。
+
+#### Soft Pred TIL（機率加權比例）
+
+不先做 argmax，直接加總每個 patch 的 positive／negative 機率：
+
+```text
+Soft_Pred_TIL = sum(prob_positive) / (sum(prob_positive) + sum(prob_negative))
+```
+
+- `prob_other` 不進分母。
+- 若機率和為 0，該 case 無效。
+
+#### Hard TIL MAE 與 Soft TIL MAE
+
+對每個有效 case 先算絕對誤差：
+
+```text
+hard_abs_error = |GT_TIL − Hard_Pred_TIL|
+soft_abs_error = |GT_TIL − Soft_Pred_TIL|
+```
+
+再對 10 個 cases 取平均：
+
+```text
+Hard TIL MAE = mean(hard_abs_error)
+Soft TIL MAE = mean(soft_abs_error)
+```
+
+報告中的 `median_ae` 為各 case `abs_error` 的中位數；`pearson_r` / `spearman_r` 則是 10 個 case 的 GT_TIL 與 Pred_TIL 相關係數。
+
+#### 一句話對照
+
+| 項目 | 計算方式 |
+|---|---|
+| GT | QuPath 硬標籤計數比例 |
+| Hard Pred | 預測硬標籤計數比例 |
+| Soft Pred | positive／negative 機率和的比例 |
+| Hard TIL MAE | GT 與 Hard Pred 的 case 平均絕對誤差 |
+| Soft TIL MAE | GT 與 Soft Pred 的 case 平均絕對誤差 |
+
+Hard TIL 是主要 endpoint（與 TILScout 可比）；Soft TIL 作次要分析，當模型機率校準較好但 argmax 偏保守／激進時，兩者可能分歧（例如 old_base：Hard MAE 0.2113、Soft MAE 0.1275）。
+
+實作見 `path_til/hnscc.py` 的 `slide_til_score_summary()`；OOF 輸出為各實驗目錄下的 `slide_til_score_summary.csv`。
+
+### Calibration
 
 Calibration 使用 leave-one-case-out 線性模型：每次只用其餘 9 cases 的 raw prediction 與 GT TIL 擬合，再預測被排除的 case，最後 clip 至 [0, 1]。因此沒有使用目標 case label 擬合其自身參數。
 
