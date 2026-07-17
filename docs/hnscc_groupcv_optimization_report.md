@@ -403,8 +403,12 @@ H&E normalization: off
 augmentation: heavy
 class weight: on
 stage: validation-selected
+source mix: TCGA dataset/train patches into fold train only
+            (HNSCC:TCGA ≈ 0.75:0.25; val/test remain pure HNSCC)
 primary patch endpoints: positive-vs-rest AUC + positive-vs-rest PRC
 reference only: hard/soft TIL MAE (incomplete QuPath patching denominator)
+current OOF: positive AUC 0.8655 / PRC 0.3998
+             (previous no-mix candidate: 0.8555 / 0.3817)
 ```
 
 ### 次要輸出
@@ -416,11 +420,12 @@ reference only: hard/soft TIL MAE (incomplete QuPath patching denominator)
 
 ### 下一輪優先順序
 
-1. 人工檢查 H0003、H0008、H0013、H0041 的 high-confidence positive false positives。
-2. 確認錯誤是 morphology confusion、`other`→positive、label noise 或 stain domain shift。
-3. 增加獨立 cases 或外部 cohort，縮小 case-cluster bootstrap CI。
-4. 若仍要改善 class imbalance，優先做 focal loss 單因子測試；不可同時更換 backbone。
+1. 以 Source mix 為鎖定設定，在獨立外部 cohort（`dataset/Testset`）做 final confirmation。
+2. 人工檢查 H0003、H0008、H0013、H0041 的 high-confidence positive false positives。
+3. 確認錯誤是 morphology confusion、`other`→positive、label noise 或 stain domain shift。
+4. 增加獨立 cases 或外部 cohort，縮小 case-cluster bootstrap CI。
 5. Calibration 必須等待更多 case-level calibration points，或使用獨立 calibration cohort。
+6. Focal／logit-adjusted／balanced sampler 本輪皆已 drop；進階遷移（L2-SP／EWC）仍屬可選。
 
 ## 13. 可重現輸出
 
@@ -479,5 +484,6 @@ results_optimization_comparison/
 | 方法學：focal γ1／γ2、logit-adjusted CE、balanced sampler | 完成（皆 drop；見 `docs/hnscc_methodology_optimization.md`） |
 | 方法學：heavy-aug leave-one-out | 完成（皆 drop） |
 | 決策指標改為 AUC／PRC（TIL MAE 僅參考） | 完成 |
-| 候選設定 | **維持** H&E off + heavy + class weight on + validation-selected（AUC 0.8555／PRC 0.3817） |
+| 方法學：Source mix（TCGA `dataset/train`） | 完成（**keep**；AUC 0.8655／PRC 0.3998） |
+| 候選設定 | **更新為** H&E off + heavy + weight on + validation-selected + **Source mix TCGA**（取代舊 0.8555／0.3817） |
 

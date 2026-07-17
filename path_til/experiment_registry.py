@@ -8,12 +8,17 @@ import yaml
 
 
 CANDIDATE_REFERENCE = {
-    "name": "candidate_hne_off_heavy_weight_on",
-    "positive_auc": 0.8555116064892437,
-    "positive_prc": 0.38170863118067333,
-    "hard_til_mae": 0.14275303565391204,
-    "macro_ovr_auc": 0.892156606025242,
-    "weighted_ovr_auc": 0.9056483820503611,
+    "name": "candidate_source_mix_tcga",
+    "positive_auc": 0.8655288450185372,
+    "positive_prc": 0.39984623124501584,
+    "hard_til_mae": 0.16776199,
+    "macro_ovr_auc": 0.9078172826143392,
+    "weighted_ovr_auc": 0.9227109426058272,
+    "previous_candidate": "candidate_hne_off_heavy_weight_on",
+    "notes": (
+        "Promoted after source-mix TCGA train-only mix met AUC/PRC keep criteria "
+        "against H&E-off/heavy/weight-on (positive AUC 0.8555 / PRC 0.3817)."
+    ),
 }
 
 DEFAULT_METHOD = {

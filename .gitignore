@@ -57,15 +57,16 @@ WSI_TME_error/
 QuPathOutput/
 Testset/
 
-# Experiment / inference outputs
+# Experiment / inference outputs (organized under results/ and baselines/)
+baselines/
+results/
+results_*/
 inference_results/
 qupath_results_cptac/
 qupath_results_heavy/
 qupath_results_light/
 qupath_results_medium/
 results_fold04_stage2_tvgh/
-results/
-results_*/
 qupath_results*/
 
 # CSV outputs (regenerate via scripts)

@@ -11,9 +11,9 @@ InceptionResNetV2_QuPath_2stage.py
     python3 InceptionResNetV2_QuPath_2stage.py --aug none
     python3 InceptionResNetV2_QuPath_2stage.py --aug medium
     python3 InceptionResNetV2_QuPath_2stage.py \\
-        --csv /workspace/Path_TIL/qupath_dataset.csv \\
-        --pretrained /workspace/Path_TIL/best_InceptionResNetV2_model.h5 \\
-        --output-dir /workspace/Path_TIL/qupath_results \\
+        --csv /workspace/qupath_dataset.csv \\
+        --pretrained /workspace/baselines/best_InceptionResNetV2_model.h5 \\
+        --output-dir /workspace/baselines/qupath_results \\
         --folds 5 --batch-size 32
     python3 InceptionResNetV2_QuPath_2stage.py --no-finetune
     python3 InceptionResNetV2_QuPath_2stage.py --only-finetune
@@ -133,7 +133,7 @@ parser.add_argument(
 parser.add_argument(
     "--pretrained",
     type=str,
-    default="/workspace/Path_TIL/best_InceptionResNetV2_model.h5",
+    default="/workspace/baselines/best_InceptionResNetV2_model.h5",
     help="預訓練 Sequential .h5（TILscout 使用之模型）",
 )
 parser.add_argument("--batch-size", type=int, default=256, help="Batch size")
@@ -152,7 +152,7 @@ parser.add_argument("--seed", type=int, default=42, help="隨機種子")
 parser.add_argument(
     "--output-dir",
     type=str,
-    default="/workspace/Path_TIL/qupath_results",
+    default="/workspace/baselines/qupath_results",
     help="輸出目錄",
 )
 _stage_mode = parser.add_mutually_exclusive_group()

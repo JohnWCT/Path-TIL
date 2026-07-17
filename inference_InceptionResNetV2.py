@@ -19,12 +19,12 @@ from tqdm import tqdm
 
 # ========= 命令列參數設定 =========
 parser = argparse.ArgumentParser(description='InceptionResNetV2 Inference')
-parser.add_argument('--model-path', type=str, default='best_InceptionResNetV2_model.h5',
-                    help='模型檔案路徑 (預設: best_InceptionResNetV2_model.h5)')
+parser.add_argument('--model-path', type=str, default='baselines/best_InceptionResNetV2_model.h5',
+                    help='模型檔案路徑 (預設: baselines/best_InceptionResNetV2_model.h5)')
 parser.add_argument('--input-dir', type=str, default='./Overlap0_in151to150',
                     help='輸入資料夾路徑 (預設: ./Overlap0_in151to150)')
-parser.add_argument('--output-dir', type=str, default='./inference_results',
-                    help='輸出結果資料夾路徑 (預設: ./inference_results)')
+parser.add_argument('--output-dir', type=str, default='./results/inference_results',
+                    help='輸出結果資料夾路徑 (預設: ./results/inference_results)')
 parser.add_argument('--batch-size', type=int, default=8,
                     help='推論的 batch size (預設: 8)')
 args = parser.parse_args()

@@ -56,6 +56,26 @@ docker run -it --gpus all \
 
 容器預設進入 `/bin/bash`。若既有容器將整個專案直接掛到 `/workspace`，請將以下指令中的 `/workspace/Path_TIL` 改為 `/workspace`；資料集仍建議獨立掛載至 `/workspace/dataset`。
 
+### 工作區目錄約定
+
+實驗輸出、基準權重與測試分開存放（Docker TIL 內根目錄為 `/workspace`）：
+
+```text
+results/       # 所有實驗輸出（results_*、inference_results/）
+baselines/     # 預訓練與舊 QuPath 訓練產物（*.h5、qupath_results_*）
+tests/         # 單元測試；舊測試腳本在 tests/legacy/
+```
+
+若根目錄仍有舊的 `results_*`／`qupath_results_*`／`best_InceptionResNetV2_model.h5`，可先預覽再搬移：
+
+```bash
+docker exec TIL python3 /workspace/scripts/organize_workspace.py --dry-run
+# 確認清單後：
+docker exec TIL python3 /workspace/scripts/organize_workspace.py --apply
+```
+
+`--apply` 只做實體搬移（不建立根目錄 symlink）；請改用 `results/`、`baselines/`、`tests/legacy/` 路徑。manifest 寫入 `results/organize_manifest.json`。
+
 ## 安裝
 
 ```bash
@@ -69,7 +89,7 @@ pip install openslide-python==1.2.0 opencv-python-headless==4.7.0.72 \
 
 ### 預訓練模型
 
-請從 [TILScout](https://github.com/huibozh/TILScout) 取得 `best_InceptionResNetV2_model.h5`，置於專案根目錄（`.gitignore` 已排除大型 `.h5` 檔，請勿提交至 Git）。
+請從 [TILScout](https://github.com/huibozh/TILScout) 取得 `best_InceptionResNetV2_model.h5`，置於 `baselines/best_InceptionResNetV2_model.h5`（`.gitignore` 已排除大型 `.h5` 與 `baselines/`，請勿提交至 Git）。
 
 ## 輸入資料集
 
@@ -212,8 +232,8 @@ cd /workspace/Path_TIL
 python3 scripts/train_hnscc_groupcv_irv2.py \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
-  --pretrained best_InceptionResNetV2_model.h5 \
-  --output-dir results_groupcv_dry_run \
+  --pretrained baselines/best_InceptionResNetV2_model.h5 \
+  --output-dir results/results_groupcv_dry_run \
   --fold 0 \
   --dry-run
 '
@@ -227,8 +247,8 @@ cd /workspace/Path_TIL
 python3 scripts/train_hnscc_groupcv_irv2.py \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
-  --pretrained best_InceptionResNetV2_model.h5 \
-  --output-dir results_groupcv_stage0 \
+  --pretrained baselines/best_InceptionResNetV2_model.h5 \
+  --output-dir results/results_groupcv_stage0 \
   --fold 0 \
   --hne-norm on \
   --batch-size 16 \
@@ -244,8 +264,8 @@ cd /workspace/Path_TIL
 python3 scripts/train_hnscc_groupcv_irv2.py \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
-  --pretrained best_InceptionResNetV2_model.h5 \
-  --output-dir results_groupcv_smoke \
+  --pretrained baselines/best_InceptionResNetV2_model.h5 \
+  --output-dir results/results_groupcv_smoke \
   --fold 0 \
   --aug heavy \
   --hne-norm on \
@@ -268,8 +288,8 @@ cd /workspace/Path_TIL
 python3 scripts/train_hnscc_groupcv_irv2.py \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
-  --pretrained best_InceptionResNetV2_model.h5 \
-  --output-dir results_groupcv_irv2 \
+  --pretrained baselines/best_InceptionResNetV2_model.h5 \
+  --output-dir results/results_groupcv_irv2 \
   --aug heavy \
   --hne-norm on \
   --class-weight on \
@@ -287,11 +307,11 @@ python3 scripts/train_hnscc_groupcv_irv2.py \
 docker exec TIL bash -lc '
 cd /workspace/Path_TIL
 python3 scripts/eval_hnscc_oof.py \
-  --pred-dir results_groupcv_irv2 \
+  --pred-dir results/results_groupcv_irv2 \
   --csv qupath_dataset.csv \
   --fold-csv folds_hnscc_group5.csv \
   --stage selected \
-  --output results_groupcv_irv2/oof_summary
+  --output results/results_groupcv_irv2/oof_summary
 '
 ```
 
@@ -331,7 +351,7 @@ python3 -m unittest discover -s tests -v
 python TILscout_edit.py \
   --slide_dir WSI_example \
   --slide_ext "*.svs" \
-  --model_file best_InceptionResNetV2_model.h5 \
+  --model_file baselines/best_InceptionResNetV2_model.h5 \
   --results_path ./results
 ```
 
@@ -345,7 +365,7 @@ python TILscout_edit.py \
 ### 2. 彙整多張 slide 分數
 
 ```bash
-python aggregate_til_scores.py --results_dir results_fold04_stage2_tvgh
+python aggregate_til_scores.py --results_dir results/results_fold04_stage2_tvgh
 # 預設輸出：<results_dir>/til_scores_summary.csv
 ```
 
@@ -362,15 +382,15 @@ python prepare_dataset_csv.py --preset qupath \
 ```bash
 python InceptionResNetV2_QuPath_2stage.py \
   --csv qupath_dataset.csv \
-  --pretrained best_InceptionResNetV2_model.h5 \
-  --output-dir qupath_results \
+  --pretrained baselines/best_InceptionResNetV2_model.h5 \
+  --output-dir baselines/qupath_results \
   --folds 5 --aug medium
 ```
 
 ### 5. K-fold 模型測試
 
 ```bash
-python InceptionResNetV2_testing.py \
+python tests/legacy/InceptionResNetV2_testing.py \
   --test_dir /path/to/labeled_patches \
   --model_dir .
 ```
@@ -384,23 +404,28 @@ Path_TIL/
 ├── normalize_HnE.py
 ├── prepare_dataset_csv.py
 ├── InceptionResNetV2_QuPath_2stage.py
-├── InceptionResNetV2_*.py   # 訓練 / CV / 測試
+├── InceptionResNetV2_*.py   # 訓練 / CV（測試腳本見 tests/legacy/）
 ├── inference_*.py
 ├── aggregate_til_scores.py
 ├── path_til/
-│   └── hnscc.py             # GroupCV、OOF 與 TIL 共用邏輯
+│   ├── hnscc.py             # GroupCV、OOF 與 TIL 共用邏輯
+│   └── paths.py             # results/ / baselines/ 路徑常數
 ├── scripts/
 │   ├── make_hnscc_group_folds.py
 │   ├── train_hnscc_groupcv_irv2.py
+│   ├── organize_workspace.py
 │   └── eval_hnscc_oof.py
+├── results/                 # 實驗輸出（organize 後）
+├── baselines/               # 預訓練與舊 QuPath 權重
 ├── tests/
-│   └── test_hnscc_groupcv.py
+│   ├── legacy/              # 舊測試腳本
+│   └── test_*.py
 ├── dockerfile
 ├── LICENSE
 └── README.md
 ```
 
-執行時產生的 `results_*`、`qupath_results*`、`patch/`、日誌與大型資料檔已列於 `.gitignore`。
+執行時產生的 `results/`、`baselines/`、`results_*`、`qupath_results*`、`patch/`、日誌與大型資料檔已列於 `.gitignore`。
 
 ## TIL 分數計算
 

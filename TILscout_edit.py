@@ -98,7 +98,7 @@ def parse_arguments():
     parser.add_argument('--patch_size', type=int, default=150, help='Patch size for tile generation (default: 150)')
     parser.add_argument('--slide_dir', type=str, default="WSI_example", help='Directory containing slide files (default: WSI_example)')
     parser.add_argument('--slide_ext', type=str, default="*.svs", help='Slide file extension pattern (default: *.svs)')
-    parser.add_argument('--model_file', type=str, default='best_InceptionResNetV2_model.h5', help='Model file path (default: best_InceptionResNetV2_model.h5)')
+    parser.add_argument('--model_file', type=str, default='baselines/best_InceptionResNetV2_model.h5', help='Model file path (default: baselines/best_InceptionResNetV2_model.h5)')
     parser.add_argument('--batch_size', type=int, default=1000, help='Batch size for prediction (default: 1000)')
     parser.add_argument('--num_threads', type=int, default=1, help='Number of threads for processing (default: 1)')
     parser.add_argument('--results_path', type=str, default="./results", help='Results directory path (default: ./results)')

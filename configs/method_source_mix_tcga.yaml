@@ -9,4 +9,11 @@ stage_policy: validation_multiclass_auc
 til_estimator: hard_raw
 hnscc_ratio: 0.75
 tcga_ratio: 0.25
-notes: Requires tcga_train_dataset.csv; mixes TCGA patches into HNSCC train only
+epochs_stage1: 30
+epochs_stage2: 30
+batch_size: 32
+seed: 42
+notes: >
+  Mix stratified TCGA patches from dataset/train (pretrained source) into
+  each HNSCC fold train split only. dataset/test is TCGA internal holdout;
+  dataset/Testset (CPTAC_LUAD/LUSC, RUMC-BRCA) stays external and is not mixed.

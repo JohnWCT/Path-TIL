@@ -30,7 +30,7 @@ TILscout 對應程式（無 norm_HnE，僅幾何與縮放）::
 
     python3 inference_cptac_luad.py
     python3 inference_cptac_luad.py --csv /workspace/Path_TIL/cptac_luad_dataset.csv \\
-        --model /workspace/Path_TIL/best_InceptionResNetV2_model.h5 --batch-size 256
+        --model /workspace/baselines/best_InceptionResNetV2_model.h5 --batch-size 256
     python3 inference_cptac_luad.py --hne-norm
 """
 
@@ -171,7 +171,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        default="/workspace/Path_TIL/best_InceptionResNetV2_model.h5",
+        default="/workspace/baselines/best_InceptionResNetV2_model.h5",
         help="TILscout 相同之 Sequential .h5",
     )
     parser.add_argument("--batch-size", type=int, default=256, help="predict batch size")
