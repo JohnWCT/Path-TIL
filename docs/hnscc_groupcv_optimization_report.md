@@ -6,7 +6,8 @@
 - 資料：TVGH HNSCC，10 cases、5,492 patches
 - 驗證：固定 5-fold case-level GroupCV；每 case 恰好作為 held-out test 一次
 - 固定項目：folds、seed 42、pretrained checkpoint、Stage 1/2 epoch 上限 30、batch size 32
-- 主要 endpoints：OOF positive-vs-rest AUC、hard-class slide TIL MAE
+- 主要 endpoints：OOF **positive-vs-rest AUC**、**positive-vs-rest PRC（average precision）**
+- 參考指標（不作 keep/drop）：slide hard/soft TIL MAE（QuPathOutput 未完整 patch 全 WSI，TIL 分母不完整）
 - 模型選擇：只依各 fold validation multiclass AUC，不使用 held-out test
 
 完成的六項測試：
@@ -65,7 +66,7 @@ results_old_base_qupath_fold04_hne_off/
 1. 相對 pure pretrained Stage 0，old_base（已在 QuPath HNSCC 上 fine-tune 過的 fold04 權重）patch 指標明顯較高。
 2. 相對 candidate：old_base 的 positive AUC／accuracy 較高，但 **hard TIL MAE 較差**（0.2113 vs 0.1428），且相關性較低。
 3. old_base 的主要問題是 **系統性低估 TIL**（hard-class positive 過少）；soft TIL MAE 反而較佳（0.1275），顯示機率質量尚可，但 argmax／硬分類比例失真。
-4. 若目標是 slide-level hard TIL（與 TILScout 定義一致），candidate GroupCV 流程優於直接拿舊 fold04 權重做 by-case 推論。
+4. 若目標是 patch ranking（AUC／PRC），應以 GroupCV OOF 的 positive AUC／PRC 為主；slide hard TIL MAE 因 QuPath 未完整 patching 僅作參考。
 5. 舊權重在 H&E on 優於 H&E off，符合其訓練時預設啟用 `norm_HnE`。
 
 ### old_base（H&E on）每 case hard TIL
@@ -361,7 +362,7 @@ Soft TIL MAE = mean(soft_abs_error)
 | Hard TIL MAE | GT 與 Hard Pred 的 case 平均絕對誤差 |
 | Soft TIL MAE | GT 與 Soft Pred 的 case 平均絕對誤差 |
 
-Hard TIL 是主要 endpoint（與 TILScout 可比）；Soft TIL 作次要分析，當模型機率校準較好但 argmax 偏保守／激進時，兩者可能分歧（例如 old_base：Hard MAE 0.2113、Soft MAE 0.1275）。
+Hard TIL / Soft TIL MAE **僅作參考診斷**，不作方法取捨依據：`dataset/QuPathOutput` 並非每張 WSI 都完整 patching，slide TIL 的分母不完整，MAE 可能系統性偏誤。正式比較以 **positive-vs-rest AUC** 與 **positive-vs-rest PRC（average precision）** 為主。
 
 實作見 `path_til/hnscc.py` 的 `slide_til_score_summary()`；OOF 輸出為各實驗目錄下的 `slide_til_score_summary.csv`。
 
@@ -383,7 +384,7 @@ Calibration 使用 leave-one-case-out 線性模型：每次只用其餘 9 cases 
 - class weight off 時 soft raw 最佳，但 calibration 仍惡化；
 - 以上 paired bootstrap CI 均跨 0。
 
-只有 10 個 case-level calibration points，線性 slope/intercept 對單一 case 很敏感。現階段不應把 calibration 寫入正式 inference；保留 hard raw 為主要 TIL 指標，soft raw 作次要分析。
+只有 10 個 case-level calibration points，線性 slope/intercept 對單一 case 很敏感。現階段不應把 calibration 寫入正式 inference；hard/soft TIL MAE 僅作參考診斷（QuPath 未完整 patching），正式取捨以 AUC／PRC 為準。
 
 ## 12. 建議設定與下一步
 
@@ -402,8 +403,8 @@ H&E normalization: off
 augmentation: heavy
 class weight: on
 stage: validation-selected
-patch endpoint: positive-vs-rest AUC
-slide endpoint: hard TIL MAE
+primary patch endpoints: positive-vs-rest AUC + positive-vs-rest PRC
+reference only: hard/soft TIL MAE (incomplete QuPath patching denominator)
 ```
 
 ### 次要輸出
@@ -464,7 +465,7 @@ results_optimization_comparison/
 
 完整數值來源為各 OOF 目錄下的 `eval_summary.json`、`slide_til_score_summary.csv` 與 `slide_til_calibration_summary.csv`。
 
-## 14. 完成確認（2026-07-16）
+## 14. 完成確認（2026-07-16／17）
 
 | 項目 | 狀態 |
 |---|---|
@@ -475,5 +476,8 @@ results_optimization_comparison/
 | B2 Stage 0/1/2 vs selected | 完成（`results_optimization_comparison/stages`） |
 | B3 hard/soft TIL + calibration | 完成（`results_optimization_comparison/til_estimators`） |
 | old_base fold04 case-level OOF | 完成（`results_old_base_qupath_fold04_hne_on` / `_hne_off`） |
-| Unit tests | 17/17 通過（後續方法學測試另計） |
-| 候選設定 | H&E off + heavy + class weight on + validation-selected |
+| 方法學：focal γ1／γ2、logit-adjusted CE、balanced sampler | 完成（皆 drop；見 `docs/hnscc_methodology_optimization.md`） |
+| 方法學：heavy-aug leave-one-out | 完成（皆 drop） |
+| 決策指標改為 AUC／PRC（TIL MAE 僅參考） | 完成 |
+| 候選設定 | **維持** H&E off + heavy + class weight on + validation-selected（AUC 0.8555／PRC 0.3817） |
+

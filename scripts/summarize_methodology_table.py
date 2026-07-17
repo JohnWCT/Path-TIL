@@ -13,6 +13,7 @@ COLUMNS = [
     "experiment_name",
     "keep_or_drop",
     "positive_auc",
+    "positive_prc",
     "macro_ovr_auc",
     "weighted_ovr_auc",
     "accuracy",
@@ -20,6 +21,7 @@ COLUMNS = [
     "hard_til_mae",
     "soft_til_mae",
     "delta_positive_auc",
+    "delta_positive_prc",
     "delta_hard_til_mae",
     "notes",
 ]

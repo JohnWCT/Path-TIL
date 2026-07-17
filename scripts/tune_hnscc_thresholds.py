@@ -146,6 +146,9 @@ def main():
         "positive_auc": float(
             patch_map["positive_vs_rest_auc_positive_binary"]
         ),
+        "positive_prc": float(
+            patch_map["positive_vs_rest_average_precision_positive_binary"]
+        ),
         "macro_ovr_auc": float(patch_map["ovr_auc_macro"]),
         "weighted_ovr_auc": float(patch_map["ovr_auc_weighted"]),
         "macro_f1": float(patch_map["f1_macro"]),

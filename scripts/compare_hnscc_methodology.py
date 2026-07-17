@@ -21,6 +21,14 @@ from path_til.experiment_registry import (  # noqa: E402
 )
 
 
+DECISION_KEYS = (
+    "positive_auc",
+    "positive_prc",
+    "macro_ovr_auc",
+    "weighted_ovr_auc",
+)
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference", required=True, help="Reference OOF dir")
@@ -32,6 +40,13 @@ def parse_args():
     )
     parser.add_argument("--output", required=True)
     return parser.parse_args()
+
+
+def _metric_value(patch, *keys):
+    for key in keys:
+        if key in patch and patch[key].get("value") is not None:
+            return patch[key]["value"]
+    return None
 
 
 def load_metrics(path):
@@ -61,21 +76,28 @@ def load_metrics(path):
         slide = payload["slide_metrics"]
         return {
             "experiment_name": experiment_name,
-            "positive_auc": patch["positive_vs_rest_auc_positive_binary"]["value"],
-            "macro_ovr_auc": patch["ovr_auc_macro"]["value"],
-            "weighted_ovr_auc": patch["ovr_auc_weighted"]["value"],
-            "accuracy": patch["accuracy"]["value"],
-            "macro_f1": patch["f1_macro"]["value"],
+            "positive_auc": _metric_value(
+                patch, "positive_vs_rest_auc_positive_binary"
+            ),
+            "positive_prc": _metric_value(
+                patch,
+                "positive_vs_rest_average_precision_positive_binary",
+            ),
+            "macro_ovr_auc": _metric_value(patch, "ovr_auc_macro"),
+            "weighted_ovr_auc": _metric_value(patch, "ovr_auc_weighted"),
+            "accuracy": _metric_value(patch, "accuracy"),
+            "macro_f1": _metric_value(patch, "f1_macro"),
             "hard_til_mae": slide["mae"],
             "soft_til_mae": slide.get("soft_mae"),
             "pearson": slide.get("pearson_r"),
             "spearman": slide.get("spearman_r"),
             "summary_path": str(summary_path),
         }
-    # threshold summary style
+    # threshold / flat summary style
     return {
         "experiment_name": experiment_name,
         "positive_auc": payload.get("positive_auc"),
+        "positive_prc": payload.get("positive_prc"),
         "macro_ovr_auc": payload.get("macro_ovr_auc"),
         "weighted_ovr_auc": payload.get("weighted_ovr_auc"),
         "accuracy": payload.get("accuracy"),
@@ -93,23 +115,29 @@ def main():
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     reference = load_metrics(args.reference)
+    # Prefer locked candidate constants for AUC/PRC decision baselines.
+    if reference.get("positive_prc") is None:
+        reference["positive_prc"] = CANDIDATE_REFERENCE["positive_prc"]
     rows = []
     ref_metrics = {
-        "positive_auc": reference["positive_auc"],
-        "hard_til_mae": reference["hard_til_mae"],
-        "macro_ovr_auc": reference["macro_ovr_auc"],
-        "weighted_ovr_auc": reference["weighted_ovr_auc"],
+        key: reference[key] if reference.get(key) is not None else CANDIDATE_REFERENCE[key]
+        for key in DECISION_KEYS
     }
-    # Ensure reference row uses candidate constants when available.
+    if reference.get("hard_til_mae") is not None:
+        ref_metrics["hard_til_mae"] = reference["hard_til_mae"]
     decision_ref = keep_or_drop(ref_metrics, CANDIDATE_REFERENCE)
     reference_row = dict(reference)
     reference_row.update(
         {
             "method_type": "reference",
             "delta_positive_auc": decision_ref["delta_positive_auc"],
+            "delta_positive_prc": decision_ref["delta_positive_prc"],
             "delta_hard_til_mae": decision_ref["delta_hard_til_mae"],
             "keep_or_drop": "reference",
-            "notes": "current candidate reference",
+            "notes": (
+                "current candidate reference; "
+                "decision uses AUC/PRC only; TIL MAE is diagnostic"
+            ),
         }
     )
     rows.append(reference_row)
@@ -118,22 +146,21 @@ def main():
         metrics = load_metrics(experiment)
         usable = {
             key: metrics[key]
-            for key in (
-                "positive_auc",
-                "hard_til_mae",
-                "macro_ovr_auc",
-                "weighted_ovr_auc",
-            )
+            for key in DECISION_KEYS
             if metrics.get(key) is not None
         }
-        if len(usable) == 4:
+        if len(usable) == len(DECISION_KEYS):
+            if metrics.get("hard_til_mae") is not None:
+                usable["hard_til_mae"] = metrics["hard_til_mae"]
             decision = keep_or_drop(usable, CANDIDATE_REFERENCE)
             metrics["delta_positive_auc"] = decision["delta_positive_auc"]
+            metrics["delta_positive_prc"] = decision["delta_positive_prc"]
             metrics["delta_hard_til_mae"] = decision["delta_hard_til_mae"]
             metrics["keep_or_drop"] = decision["decision"]
             metrics["notes"] = ";".join(decision["reasons"]) or "meets_criteria"
         else:
             metrics["delta_positive_auc"] = None
+            metrics["delta_positive_prc"] = None
             metrics["delta_hard_til_mae"] = None
             metrics["keep_or_drop"] = "incomplete"
             metrics["notes"] = "missing_metrics_for_keep_or_drop"

@@ -10,6 +10,7 @@ import yaml
 CANDIDATE_REFERENCE = {
     "name": "candidate_hne_off_heavy_weight_on",
     "positive_auc": 0.8555116064892437,
+    "positive_prc": 0.38170863118067333,
     "hard_til_mae": 0.14275303565391204,
     "macro_ovr_auc": 0.892156606025242,
     "weighted_ovr_auc": 0.9056483820503611,
@@ -46,28 +47,40 @@ def load_method_config(path):
 
 
 def keep_or_drop(metrics, reference=None):
-    """Apply the methodology success criteria against the current candidate."""
+    """Apply ranking success criteria; TIL MAE is reported but not decisive.
+
+    Primary judgment uses patch-level positive-vs-rest AUC and PRC (average
+    precision). Slide TIL MAE remains a reference diagnostic only, because
+    QuPathOutput does not patch every WSI completely and the TIL denominator
+    is therefore incomplete.
+    """
     reference = reference or CANDIDATE_REFERENCE
     positive_auc = float(metrics["positive_auc"])
-    hard_til_mae = float(metrics["hard_til_mae"])
+    positive_prc = float(metrics["positive_prc"])
     macro_ovr_auc = float(metrics["macro_ovr_auc"])
     weighted_ovr_auc = float(metrics["weighted_ovr_auc"])
+    hard_til_mae = metrics.get("hard_til_mae")
     reasons = []
     if positive_auc <= reference["positive_auc"]:
         reasons.append("positive_auc_not_improved")
-    if hard_til_mae >= reference["hard_til_mae"]:
-        reasons.append("hard_til_mae_not_improved")
+    if positive_prc <= reference["positive_prc"]:
+        reasons.append("positive_prc_not_improved")
     if macro_ovr_auc < reference["macro_ovr_auc"] - 1e-8:
         reasons.append("macro_ovr_auc_decreased")
     if weighted_ovr_auc < reference["weighted_ovr_auc"] - 0.01:
         reasons.append("weighted_ovr_auc_clearly_decreased")
     decision = "keep" if not reasons else "drop"
-    return {
+    result = {
         "decision": decision,
         "reasons": reasons,
         "delta_positive_auc": positive_auc - reference["positive_auc"],
-        "delta_hard_til_mae": hard_til_mae - reference["hard_til_mae"],
+        "delta_positive_prc": positive_prc - reference["positive_prc"],
     }
+    if hard_til_mae is not None:
+        result["delta_hard_til_mae"] = float(hard_til_mae) - reference["hard_til_mae"]
+    else:
+        result["delta_hard_til_mae"] = None
+    return result
 
 
 def list_config_paths(configs_dir):

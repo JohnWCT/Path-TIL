@@ -66,6 +66,17 @@ def parse_args():
         help="Training-only augmentation level (default: heavy)",
     )
     parser.add_argument(
+        "--disable-aug-component",
+        action="append",
+        default=None,
+        dest="disable_aug_components",
+        choices=("geometric", "hed", "blur_noise", "cutout", "color_jitter"),
+        help=(
+            "Disable one heavy-aug component; repeat to disable multiple "
+            "(only applies when --aug heavy)"
+        ),
+    )
+    parser.add_argument(
         "--hne-norm",
         choices=("on", "off"),
         default="on",
@@ -456,7 +467,14 @@ def make_tf_dataset(tf, images, labels, batch_size, training, augmentation, seed
 def build_imgaug_sequence_class(tf):
     class ImgAugSequence(tf.keras.utils.Sequence):
         def __init__(
-            self, images, labels, batch_size, shuffle=False, augment=False, seed=42
+            self,
+            images,
+            labels,
+            batch_size,
+            shuffle=False,
+            augment=False,
+            seed=42,
+            disable_aug_components=None,
         ):
             self.images = images
             self.labels = labels
@@ -465,13 +483,22 @@ def build_imgaug_sequence_class(tf):
             self.augment = bool(augment)
             self.random = np.random.RandomState(seed)
             self.indices = np.arange(len(images))
-            self.pipeline = self._build_pipeline() if augment else None
+            self.disable_aug_components = set(disable_aug_components or ())
+            self.pipeline = self._build_pipeline(self.disable_aug_components) if augment else None
             self.on_epoch_end()
 
         @staticmethod
-        def _build_pipeline():
+        def _build_pipeline(disable_aug_components=None):
             import imgaug.augmenters as iaa
             from skimage.color import hed2rgb, rgb2hed
+
+            disabled = set(disable_aug_components or ())
+            known = {"geometric", "hed", "blur_noise", "cutout", "color_jitter"}
+            unknown = sorted(disabled - known)
+            if unknown:
+                raise ValueError(
+                    "Unknown aug components to disable: {0}".format(unknown)
+                )
 
             def rgb2hed_func(images, random_state, parents, hooks):
                 return [rgb2hed(image).astype("float32") for image in images]
@@ -481,8 +508,9 @@ def build_imgaug_sequence_class(tf):
                     (hed2rgb(image) * 255).astype("uint8") for image in images
                 ]
 
-            return iaa.Sequential(
-                [
+            blocks = []
+            if "geometric" not in disabled:
+                blocks.append(
                     iaa.Sometimes(
                         0.5,
                         iaa.SomeOf(
@@ -493,7 +521,10 @@ def build_imgaug_sequence_class(tf):
                                 iaa.Rot90((1, 3)),
                             ],
                         ),
-                    ),
+                    )
+                )
+            if "hed" not in disabled:
+                blocks.append(
                     iaa.Sometimes(
                         0.5,
                         iaa.Sequential(
@@ -504,7 +535,10 @@ def build_imgaug_sequence_class(tf):
                                 iaa.Lambda(hed2rgb_func),
                             ]
                         ),
-                    ),
+                    )
+                )
+            if "blur_noise" not in disabled:
+                blocks.append(
                     iaa.Sometimes(
                         0.5,
                         iaa.OneOf(
@@ -518,7 +552,12 @@ def build_imgaug_sequence_class(tf):
                                 ),
                             ]
                         ),
-                    ),
+                    )
+                )
+            if "color_jitter" not in disabled:
+                # Kept at probability 0 to match the historical heavy pipeline
+                # used by the current candidate (effectively a no-op).
+                blocks.append(
                     iaa.Sometimes(
                         0,
                         iaa.OneOf(
@@ -535,7 +574,10 @@ def build_imgaug_sequence_class(tf):
                                 iaa.JpegCompression(compression=(0.0, 90)),
                             ]
                         ),
-                    ),
+                    )
+                )
+            if "cutout" not in disabled:
+                blocks.append(
                     iaa.Sometimes(
                         0.5,
                         iaa.Cutout(
@@ -544,10 +586,9 @@ def build_imgaug_sequence_class(tf):
                             fill_mode="constant",
                             cval=255,
                         ),
-                    ),
-                ],
-                random_order=True,
-            )
+                    )
+                )
+            return iaa.Sequential(blocks, random_order=True)
 
         def __len__(self):
             return int(np.ceil(len(self.images) / float(self.batch_size)))
@@ -571,6 +612,7 @@ def build_imgaug_sequence_class(tf):
 def training_inputs(tf, args, images, labels, fold, stage_seed):
     if args.aug == "heavy" and not args.baseline_only:
         sequence_class = build_imgaug_sequence_class(tf)
+        disabled = getattr(args, "disable_aug_components", None) or []
         train_data = sequence_class(
             images,
             labels,
@@ -578,6 +620,7 @@ def training_inputs(tf, args, images, labels, fold, stage_seed):
             shuffle=True,
             augment=True,
             seed=stage_seed,
+            disable_aug_components=disabled,
         )
         fit_kwargs = {
             "workers": args.fit_workers,

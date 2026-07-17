@@ -638,9 +638,10 @@ def validate_oof_predictions(frame, assignments, predictions, n_folds=5):
 
 
 def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
-    """Return long-form patch classification and safe OVR AUC metrics."""
+    """Return long-form patch classification and safe OVR AUC/PRC metrics."""
     from sklearn.metrics import (
         accuracy_score,
+        average_precision_score,
         cohen_kappa_score,
         f1_score,
         precision_score,
@@ -696,6 +697,7 @@ def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
     add("kappa", cohen_kappa_score(y_true, y_pred))
 
     defined_values = []
+    defined_prc_values = []
     class_counts = []
     for index, label in enumerate(LABELS):
         binary = (y_true == index).astype(np.int64)
@@ -703,15 +705,28 @@ def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
         n_negative = n_samples - n_positive
         if n_positive == 0 or n_negative == 0:
             value = None
+            prc_value = None
             status = "single_class"
         else:
             value = roc_auc_score(binary, probabilities[:, index])
+            prc_value = average_precision_score(binary, probabilities[:, index])
             status = "ok"
             defined_values.append(float(value))
+            defined_prc_values.append(float(prc_value))
             class_counts.append(n_positive)
         add(
             "ovr_auc",
             value,
+            class_name=label,
+            average="none",
+            status=status,
+            n_positive=n_positive,
+            n_negative=n_negative,
+            n_defined_classes=1 if status == "ok" else 0,
+        )
+        add(
+            "ovr_average_precision",
+            prc_value,
             class_name=label,
             average="none",
             status=status,
@@ -730,12 +745,28 @@ def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
                 n_negative=n_negative,
                 n_defined_classes=1 if status == "ok" else 0,
             )
+            add(
+                "positive_vs_rest_average_precision",
+                prc_value,
+                class_name=label,
+                average="binary",
+                status=status,
+                n_positive=n_positive,
+                n_negative=n_negative,
+                n_defined_classes=1 if status == "ok" else 0,
+            )
 
     all_defined = len(defined_values) == len(LABELS)
     aggregate_status = "ok" if all_defined else "single_class"
     macro_value = float(np.mean(defined_values)) if all_defined else None
     weighted_value = (
         float(np.average(defined_values, weights=class_counts))
+        if all_defined
+        else None
+    )
+    macro_prc = float(np.mean(defined_prc_values)) if all_defined else None
+    weighted_prc = (
+        float(np.average(defined_prc_values, weights=class_counts))
         if all_defined
         else None
     )
@@ -752,6 +783,20 @@ def patch_metric_summary(y_true, probabilities, scope="oof_patch"):
         average="weighted",
         status=aggregate_status,
         n_defined_classes=len(defined_values),
+    )
+    add(
+        "ovr_average_precision",
+        macro_prc,
+        average="macro",
+        status=aggregate_status,
+        n_defined_classes=len(defined_prc_values),
+    )
+    add(
+        "ovr_average_precision",
+        weighted_prc,
+        average="weighted",
+        status=aggregate_status,
+        n_defined_classes=len(defined_prc_values),
     )
     return pd.DataFrame(
         rows,

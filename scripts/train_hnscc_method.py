@@ -61,10 +61,25 @@ def parse_args():
     parser.add_argument("--epochs-stage1", type=int, default=None)
     parser.add_argument("--epochs-stage2", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument(
+        "--disable-aug-component",
+        action="append",
+        default=None,
+        dest="disable_aug_components",
+        choices=("geometric", "hed", "blur_noise", "cutout", "color_jitter"),
+        help="Disable heavy-aug component(s); repeatable",
+    )
     return parser.parse_args()
 
 
 def build_namespace(cli, method):
+    disabled = list(cli.disable_aug_components or [])
+    method_disabled = method.get("disable_aug_components") or []
+    if isinstance(method_disabled, str):
+        method_disabled = [method_disabled]
+    for component in method_disabled:
+        if component not in disabled:
+            disabled.append(component)
     return argparse.Namespace(
         csv=cli.csv,
         fold_csv=cli.fold_csv,
@@ -103,6 +118,7 @@ def build_namespace(cli, method):
         stage_policy=method.get(
             "stage_policy", "validation_multiclass_auc"
         ),
+        disable_aug_components=disabled or None,
     )
 
 

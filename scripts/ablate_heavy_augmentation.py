@@ -11,12 +11,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# color_jitter is historically probability-0 in the candidate heavy pipeline,
+# so leave-one-out on it is a no-op; still allow it for explicit checks.
 COMPONENTS = (
     "geometric",
     "hed",
     "blur_noise",
     "cutout",
-    "color_jitter",
 )
 
 
@@ -24,8 +25,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Launch leave-one-component-out heavy augmentation ablations. "
-            "Each run reuses train_hnscc_method.py with heavy aug and records "
-            "the disabled component in the output directory name."
+            "Each run reuses train_hnscc_method.py with --disable-aug-component."
         )
     )
     parser.add_argument("--csv", required=True)
@@ -44,6 +44,11 @@ def parse_args():
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fold", action="append", type=int, default=None)
+    parser.add_argument(
+        "--skip-full",
+        action="store_true",
+        help="Skip the full_heavy control run (reuse candidate OOF instead)",
+    )
     return parser.parse_args()
 
 
@@ -51,8 +56,9 @@ def main():
     args = parse_args()
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
-    # Full heavy baseline under this root, then leave-one-out variants.
-    jobs = [("full_heavy", None)]
+    jobs = []
+    if not args.skip_full:
+        jobs.append(("full_heavy", None))
     for component in args.components:
         jobs.append(("without_{0}".format(component), component))
 
@@ -72,17 +78,15 @@ def main():
             "--output-dir",
             str(output_dir),
         ]
+        if disabled is not None:
+            command.extend(["--disable-aug-component", disabled])
         if args.fold:
             for fold in args.fold:
                 command.extend(["--fold", str(fold)])
         if args.dry_run:
             command.append("--dry-run")
         print("Running ablation job {0} (disable={1})".format(name, disabled))
-        # Component masking is currently recorded via directory naming; the
-        # shared heavy pipeline remains intact until fine-grained imgaug
-        # component flags are wired into ImgAugSequence.
-        metadata = output_dir
-        metadata.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "ablation_component.txt").write_text(
             "disabled_component={0}\n".format(disabled), encoding="utf-8"
         )

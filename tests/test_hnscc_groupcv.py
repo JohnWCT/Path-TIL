@@ -169,6 +169,12 @@ class MetricTests(unittest.TestCase):
         ]
         self.assertTrue((aggregate["status"] == "ok").all())
         self.assertTrue(np.allclose(aggregate["value"], 1.0))
+        positive_prc = summary[
+            (summary["metric"] == "positive_vs_rest_average_precision")
+            & (summary["class"] == "positive")
+        ].iloc[0]
+        self.assertEqual(positive_prc["status"], "ok")
+        self.assertAlmostEqual(float(positive_prc["value"]), 1.0)
 
     def test_patch_metric_summary_marks_missing_class_auc_undefined(self):
         y_true = np.array([0, 1, 0, 1])

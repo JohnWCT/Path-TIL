@@ -24,26 +24,32 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(config["hne_norm"], "off")
             self.assertEqual(config["name"], "method_demo")
 
-    def test_keep_or_drop_success_criteria(self):
+    def test_keep_or_drop_uses_auc_prc_not_til_mae(self):
         better = keep_or_drop(
             {
                 "positive_auc": CANDIDATE_REFERENCE["positive_auc"] + 0.01,
-                "hard_til_mae": CANDIDATE_REFERENCE["hard_til_mae"] - 0.01,
+                "positive_prc": CANDIDATE_REFERENCE["positive_prc"] + 0.01,
+                "hard_til_mae": CANDIDATE_REFERENCE["hard_til_mae"] + 0.05,
                 "macro_ovr_auc": CANDIDATE_REFERENCE["macro_ovr_auc"],
                 "weighted_ovr_auc": CANDIDATE_REFERENCE["weighted_ovr_auc"],
             }
         )
         self.assertEqual(better["decision"], "keep")
-        worse = keep_or_drop(
+        self.assertGreater(better["delta_hard_til_mae"], 0.0)
+
+        worse_ranking = keep_or_drop(
             {
                 "positive_auc": 0.80,
-                "hard_til_mae": 0.20,
+                "positive_prc": 0.20,
+                "hard_til_mae": 0.01,
                 "macro_ovr_auc": 0.80,
                 "weighted_ovr_auc": 0.80,
             }
         )
-        self.assertEqual(worse["decision"], "drop")
-        self.assertIn("positive_auc_not_improved", worse["reasons"])
+        self.assertEqual(worse_ranking["decision"], "drop")
+        self.assertIn("positive_auc_not_improved", worse_ranking["reasons"])
+        self.assertIn("positive_prc_not_improved", worse_ranking["reasons"])
+        self.assertNotIn("hard_til_mae_not_improved", worse_ranking["reasons"])
 
 
 if __name__ == "__main__":
