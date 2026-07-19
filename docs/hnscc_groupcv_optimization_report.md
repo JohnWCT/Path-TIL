@@ -404,11 +404,13 @@ augmentation: heavy
 class weight: on
 stage: validation-selected
 source mix: TCGA dataset/train patches into fold train only
-            (HNSCC:TCGA ≈ 0.75:0.25; val/test remain pure HNSCC)
+            (HNSCC:TCGA = 0.50:0.50; val/test remain pure HNSCC)
+            ratio ablation also tested 0.90:0.10 / 0.75:0.25 / 0.25:0.75
 primary patch endpoints: positive-vs-rest AUC + positive-vs-rest PRC
 reference only: hard/soft TIL MAE (incomplete QuPath patching denominator)
-current OOF: positive AUC 0.8655 / PRC 0.3998
-             (previous no-mix candidate: 0.8555 / 0.3817)
+current OOF: positive AUC 0.8848 / PRC 0.4196
+             (previous 0.75:0.25: 0.8655 / 0.3998; no-mix: 0.8555 / 0.3817)
+             (Pareto alt 0.25:0.75: 0.8809 / 0.4503)
 ```
 
 ### 次要輸出
@@ -484,6 +486,7 @@ results_optimization_comparison/
 | 方法學：focal γ1／γ2、logit-adjusted CE、balanced sampler | 完成（皆 drop；見 `docs/hnscc_methodology_optimization.md`） |
 | 方法學：heavy-aug leave-one-out | 完成（皆 drop） |
 | 決策指標改為 AUC／PRC（TIL MAE 僅參考） | 完成 |
-| 方法學：Source mix（TCGA `dataset/train`） | 完成（**keep**；AUC 0.8655／PRC 0.3998） |
-| 候選設定 | **更新為** H&E off + heavy + weight on + validation-selected + **Source mix TCGA**（取代舊 0.8555／0.3817） |
+| 方法學：Source mix（TCGA `dataset/train`） | 完成（0.75:0.25 曾 keep；比例 ablation 後升為 **0.50:0.50**） |
+| Source mix 多比例 ablation | **完成**（0.9:0.1 drop；0.5:0.5／0.25:0.75 keep） |
+| 候選設定 | **更新為** H&E off + heavy + weight on + validation-selected + **Source mix 0.50:0.50**（AUC 0.8848／PRC 0.4196） |
 

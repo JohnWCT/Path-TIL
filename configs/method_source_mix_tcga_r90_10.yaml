@@ -1,0 +1,18 @@
+name: method_source_mix_tcga_r90_10
+method_type: source_mix
+hne_norm: off
+aug: heavy
+class_weight: on
+loss: weighted_ce
+sampler: random
+stage_policy: validation_multiclass_auc
+til_estimator: hard_raw
+hnscc_ratio: 0.90
+tcga_ratio: 0.10
+epochs_stage1: 30
+epochs_stage2: 30
+batch_size: 32
+seed: 42
+notes: >
+  Source-mix ratio ablation: HNSCC:TCGA = 0.90:0.10.
+  TCGA from dataset/train into fold train only; val/test stay pure HNSCC.

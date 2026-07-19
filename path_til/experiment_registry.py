@@ -8,16 +8,19 @@ import yaml
 
 
 CANDIDATE_REFERENCE = {
-    "name": "candidate_source_mix_tcga",
-    "positive_auc": 0.8655288450185372,
-    "positive_prc": 0.39984623124501584,
-    "hard_til_mae": 0.16776199,
-    "macro_ovr_auc": 0.9078172826143392,
-    "weighted_ovr_auc": 0.9227109426058272,
-    "previous_candidate": "candidate_hne_off_heavy_weight_on",
+    "name": "candidate_source_mix_tcga_r50_50",
+    "positive_auc": 0.88476240,
+    "positive_prc": 0.41958344,
+    "hard_til_mae": 0.17811870,
+    "macro_ovr_auc": 0.9172945300197471,
+    "weighted_ovr_auc": 0.928758601544409,
+    "hnscc_ratio": 0.50,
+    "tcga_ratio": 0.50,
+    "previous_candidate": "candidate_source_mix_tcga_r75_25",
     "notes": (
-        "Promoted after source-mix TCGA train-only mix met AUC/PRC keep criteria "
-        "against H&E-off/heavy/weight-on (positive AUC 0.8555 / PRC 0.3817)."
+        "Promoted after source-mix ratio ablation: 0.50:0.50 beat 0.75:0.25 on "
+        "positive AUC (0.8848) and PRC (0.4196). 0.25:0.75 also kept (best PRC "
+        "0.4503) but lower AUC; neither Pareto-dominates the other."
     ),
 }
 

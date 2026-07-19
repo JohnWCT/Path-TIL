@@ -4,26 +4,30 @@
 
 本輪依《Path-TIL 方法學優化 IDE 操作手冊》完成可重現實驗骨架，並以 **positive-vs-rest AUC／PRC** 為主要判斷完成完整 5-fold 比較。
 
-**目前最佳候選（已由 Source mix 取代舊設定）**：
+**目前最佳候選（Source mix 比例 ablation 後更新）**：
 
 ```text
 H&E off + heavy + class weight on + validation multiclass AUC
-+ Source mix：各 fold train 混入 TCGA `dataset/train` patches（HNSCC:TCGA ≈ 0.75:0.25）
-val／test 仍為純 HNSCC
-positive AUC = 0.8655
-positive PRC = 0.3998
-hard TIL MAE = 0.1678（參考，不作 keep/drop）
-輸出：results/results_method_source_mix_tcga/
-OOF：results/results_oof_with_prc/source_mix_tcga/
++ Source mix：HNSCC:TCGA = 0.50:0.50（各 fold train；val/test 純 HNSCC）
+positive AUC = 0.8848
+positive PRC = 0.4196
+hard TIL MAE = 0.1781（參考，不作 keep/drop）
+輸出：results/results_method_source_mix_tcga_r50_50/
+OOF：results/results_oof_with_prc/source_mix_tcga_r50_50/
+config：configs/method_source_mix_tcga_r50_50.yaml
 ```
 
-舊參考（已被取代）：
+先前候選（已被 0.50:0.50 取代）：
 
 ```text
-H&E off + heavy + class weight on（無 source mix）
-positive AUC = 0.8555
-positive PRC = 0.3817
-hard TIL MAE = 0.1428（參考）
+Source mix 0.75:0.25 → AUC 0.8655 / PRC 0.3998
+no-mix（H&E off / heavy / weight on）→ AUC 0.8555 / PRC 0.3817
+```
+
+Pareto 備選（相對 0.75:0.25 亦 keep，但 AUC 低於 0.50:0.50）：
+
+```text
+Source mix 0.25:0.75 → AUC 0.8809 / PRC 0.4503（最高 PRC）
 ```
 
 成功標準（主要判斷 = AUC / PRC；相對當時比較參考）：
@@ -70,12 +74,15 @@ tests/test_organize_workspace.py
 完整表：[`hnscc_methodology_comparison_table.md`](hnscc_methodology_comparison_table.md)  
 數值來源：`results/results_methodology_comparison_auc_prc_full/`、`results/results_oof_with_prc/`
 
-本表以舊 candidate（無 source mix）為比較參考；Source mix 為唯一通過 keep 標準者。
+本表以舊 no-mix candidate 為比較參考（方法學全實驗）。Source mix 比例細節見下節。
 
 | 方法 | Positive AUC | Positive PRC | 決策 |
 |---|---:|---:|---|
-| **source_mix_tcga**（train 混 TCGA；val/test 純 HNSCC） | **0.8655** | **0.3998** | **keep → 新候選** |
-| candidate（H&E off / heavy / weight on / val multiclass AUC） | 0.8555 | 0.3817 | 舊 reference（已被取代） |
+| **source_mix 0.50:0.50** | **0.8848** | **0.4196** | **keep → 目前候選** |
+| source_mix 0.25:0.75 | 0.8809 | 0.4503 | keep（Pareto；最高 PRC） |
+| source_mix 0.75:0.25 | 0.8655 | 0.3998 | 曾 keep；現為比例 ablation reference |
+| source_mix 0.90:0.10 | 0.8606 | 0.3829 | drop（相對 0.75:0.25） |
+| candidate no-mix | 0.8555 | 0.3817 | 舊 reference |
 | threshold TIL（validation-tuned） | 0.8555 | 0.3817 | drop（未嚴格優於） |
 | fixed Stage 2 | 0.8508 | 0.3655 | drop |
 | focal γ=1 | 0.8463 | 0.3279 | drop |
@@ -89,12 +96,32 @@ tests/test_organize_workspace.py
 
 解讀：
 
-1. **Source mix 同時提升 AUC（+0.0100）與 PRC（+0.0181）**，且 macro／weighted OVR AUC 上升，為本輪唯一 keep。
-2. Stage policy／threshold TIL 在 ranking 指標上未優於 validation multiclass AUC。
-3. Focal、logit-adjusted、balanced sampler 皆降低 AUC／PRC。
-4. Heavy-aug leave-one-out（去掉 geometric／HED／blur-noise／cutout）皆變差，支持保留完整 heavy pipeline。
-5. Source mix 的 hard TIL MAE（0.1678）略高於舊候選（0.1428），但 MAE 僅參考、不作 keep/drop。
-6. 後續比較請以 Source mix 為新 reference（見 `path_til/experiment_registry.py` 的 `CANDIDATE_REFERENCE`）。
+1. **Source mix 0.50:0.50 為目前最佳**（最高 AUC，且 PRC 優於 0.75:0.25／no-mix）。
+2. **0.25:0.75 為 PRC 備選**；與 0.50:0.50 互不嚴格支配。
+3. Stage policy／threshold TIL、focal、logit-adjusted、balanced sampler、heavy-aug leave-one-out 皆未優於當時 no-mix 候選。
+4. TIL MAE 僅參考；本輪 keep/drop 不依賴 MAE。
+5. 後續比較請以 `CANDIDATE_REFERENCE`（0.50:0.50）為準。
+
+### Source mix：不同 TCGA 混入量比較
+
+數值來源：`results/results_methodology_comparison_source_mix_ratios/`  
+比較參考：先前候選 **0.75:0.25**（AUC 0.8655／PRC 0.3998）。
+
+| 設定 | HNSCC:TCGA | TCGA 張數 | Positive AUC | Positive PRC | ΔAUC | ΔPRC | 決策 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| no-mix（更早候選） | 1.00 : 0.00 | 0 | 0.8555 | 0.3817 | — | — | 已被 source mix 取代 |
+| source_mix 輕量 | 0.90 : 0.10 | 610 | 0.8606 | 0.3829 | −0.0050 | −0.0170 | **drop**（低於 0.75:0.25） |
+| source_mix（先前候選） | 0.75 : 0.25 | 1831 | 0.8655 | 0.3998 | 0 | 0 | 本表 reference |
+| **source_mix 半量** | **0.50 : 0.50** | **5492** | **0.8848** | **0.4196** | **+0.0192** | **+0.0197** | **keep → 新候選**（最高 AUC） |
+| source_mix 偏 TCGA | 0.25 : 0.75 | 16476 | 0.8809 | 0.4503 | +0.0153 | +0.0505 | **keep**（最高 PRC；Pareto 備選） |
+
+解讀：
+
+1. **0.10 TCGA 不足**：相對 0.25 略差，不能取代 0.75:0.25。
+2. **0.50 與 0.75 皆 keep**：同時提升 AUC 與 PRC；兩者互不嚴格支配（0.50 較高 AUC，0.75 較高 PRC）。
+3. **新候選取 0.50:0.50**：以最高 positive AUC 為主，並仍提升 PRC；輸出目錄見上。
+4. 若應用更在意 rare-positive 的 PRC，可改用 **0.25:0.75**（需外部 cohort 再確認）。
+5. 混入量愈大 hard TIL MAE 略升（僅參考）；選模仍只看 AUC／PRC。
 
 ### 完成確認
 
@@ -107,7 +134,8 @@ tests/test_organize_workspace.py
 | Balanced sampler 完整 5-fold | 完成 |
 | Heavy aug component ablation（`--disable-aug-component`） | 完成 |
 | AUC／PRC 統一比較表 | 完成 |
-| Source mix（TCGA `dataset/train`） | **完成（keep；已升為新候選）** |
+| Source mix（TCGA `dataset/train`，0.75:0.25） | 完成（曾 keep；現為比例表 reference） |
+| Source mix 多比例（0.9:0.1／0.5:0.5／0.25:0.75） | **完成** |
 | L2-SP / backbone / EWC | 未做 |
 
 ## 4. 執行方式
@@ -240,7 +268,7 @@ docker exec TIL python3 /workspace/scripts/organize_workspace.py --dry-run
 
 ## 6. 後續可選
 
-1. 以 Source mix 為新 reference，做獨立外部 cohort（`dataset/Testset`）final confirmation
+1. 以 Source mix **0.50:0.50**（或 PRC 備選 **0.25:0.75**）在獨立外部 cohort（`dataset/Testset`）做 final confirmation
 2. L2-SP／backbone registry／EWC
 3. 人工檢查 high-confidence false positives（見 GroupCV 報告）
 
