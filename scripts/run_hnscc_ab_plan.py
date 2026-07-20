@@ -165,6 +165,15 @@ def phase_a2(profile: dict, dry_run: bool, skip_existing: bool) -> None:
         run_cmd(["python3", "scripts/update_ab_plan_reports.py"], dry_run=False)
 
 
+def missing_folds(output_dir: Path) -> list[int]:
+    missing = []
+    for fold in range(5):
+        marker = output_dir / "fold{0:02d}".format(fold) / "fold_metrics.json"
+        if not marker.is_file():
+            missing.append(fold)
+    return missing
+
+
 def train_source_mix(
     config: str,
     output_dir: Path,
@@ -173,48 +182,17 @@ def train_source_mix(
     dry_run: bool,
     skip_existing: bool,
 ) -> None:
-    marker = output_dir / "fold04" / "fold_metrics.json"
-    if skip_existing and marker.is_file():
-        log("skip training (complete): {0}".format(output_dir))
-        return
-    cmd = [
-        "python3",
-        "scripts/train_hnscc_source_mix.py",
-        "--config",
-        config,
-        "--csv-hnscc",
-        "qupath_dataset.csv",
-        "--csv-tcga",
-        "tcga_train_dataset.csv",
-        "--fold-csv",
-        "folds_hnscc_group5.csv",
-        "--pretrained",
-        str(PRETRAINED_IRV2),
-        "--output-dir",
-        str(output_dir),
-        "--batch-size",
-        str(profile["batch_size_train_irv2"]),
-        "--image-workers",
-        str(profile["image_workers"]),
-        "--fit-workers",
-        str(profile["fit_workers"]),
-        "--use-multiprocessing",
-        "on" if profile["use_multiprocessing"] else "off",
-    ]
-    if seed is not None:
-        cmd.extend(["--seed", str(seed)])
-    run_cmd(cmd, dry_run)
-
-
-def train_l2sp(config: str, output_dir: Path, profile: dict, dry_run: bool, skip_existing: bool) -> None:
-    marker = output_dir / "fold04" / "fold_metrics.json"
-    if skip_existing and marker.is_file():
-        log("skip L2-SP (complete): {0}".format(output_dir))
-        return
-    run_cmd(
-        [
+    folds = list(range(5))
+    if skip_existing:
+        folds = missing_folds(output_dir)
+        if not folds:
+            log("skip training (complete): {0}".format(output_dir))
+            return
+        log("resume training folds {0} -> {1}".format(folds, output_dir))
+    for fold in folds:
+        cmd = [
             "python3",
-            "scripts/train_hnscc_l2sp.py",
+            "scripts/train_hnscc_source_mix.py",
             "--config",
             config,
             "--csv-hnscc",
@@ -227,6 +205,8 @@ def train_l2sp(config: str, output_dir: Path, profile: dict, dry_run: bool, skip
             str(PRETRAINED_IRV2),
             "--output-dir",
             str(output_dir),
+            "--fold",
+            str(fold),
             "--batch-size",
             str(profile["batch_size_train_irv2"]),
             "--image-workers",
@@ -235,9 +215,50 @@ def train_l2sp(config: str, output_dir: Path, profile: dict, dry_run: bool, skip
             str(profile["fit_workers"]),
             "--use-multiprocessing",
             "on" if profile["use_multiprocessing"] else "off",
-        ],
-        dry_run,
-    )
+        ]
+        if seed is not None:
+            cmd.extend(["--seed", str(seed)])
+        run_cmd(cmd, dry_run)
+
+
+def train_l2sp(config: str, output_dir: Path, profile: dict, dry_run: bool, skip_existing: bool) -> None:
+    folds = list(range(5))
+    if skip_existing:
+        folds = missing_folds(output_dir)
+        if not folds:
+            log("skip L2-SP (complete): {0}".format(output_dir))
+            return
+        log("resume L2-SP folds {0} -> {1}".format(folds, output_dir))
+    for fold in folds:
+        run_cmd(
+            [
+                "python3",
+                "scripts/train_hnscc_l2sp.py",
+                "--config",
+                config,
+                "--csv-hnscc",
+                "qupath_dataset.csv",
+                "--csv-tcga",
+                "tcga_train_dataset.csv",
+                "--fold-csv",
+                "folds_hnscc_group5.csv",
+                "--pretrained",
+                str(PRETRAINED_IRV2),
+                "--output-dir",
+                str(output_dir),
+                "--fold",
+                str(fold),
+                "--batch-size",
+                str(profile["batch_size_train_irv2"]),
+                "--image-workers",
+                str(profile["image_workers"]),
+                "--fit-workers",
+                str(profile["fit_workers"]),
+                "--use-multiprocessing",
+                "on" if profile["use_multiprocessing"] else "off",
+            ],
+            dry_run,
+        )
 
 
 def eval_oof(pred_dir: Path, oof_name: str, dry_run: bool, skip_existing: bool) -> None:

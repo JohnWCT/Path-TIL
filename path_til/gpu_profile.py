@@ -29,7 +29,9 @@ def detect_gpu_profile(target_utilization: float = 0.90) -> dict:
     cpu = max(1, os.cpu_count() or 8)
     gpu_mb = _gpu_memory_mb()
     image_workers = max(4, min(cpu - 2, 14))
-    fit_workers = max(2, min(6, cpu // 3))
+    # Heavy imgaug + fork workers duplicate large in-memory arrays; keep fit
+    # workers single-process to avoid SIGKILL/OOM while still feeding GPU via batch size.
+    fit_workers = 1
 
     profile = {
         "cpu_count": cpu,
@@ -37,7 +39,7 @@ def detect_gpu_profile(target_utilization: float = 0.90) -> dict:
         "target_utilization": target_utilization,
         "image_workers": image_workers,
         "fit_workers": fit_workers,
-        "use_multiprocessing": fit_workers > 1,
+        "use_multiprocessing": False,
         "batch_size_eval": 128,
         "batch_size_train_irv2": 48,
         "batch_size_train_backbone": 64,
