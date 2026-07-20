@@ -51,10 +51,12 @@ path_til/stage_selection.py
 path_til/til_threshold.py
 path_til/experiment_registry.py
 path_til/paths.py
+path_til/scoreboard.py
 path_til/backbones/
 scripts/train_hnscc_method.py
 scripts/organize_workspace.py
 scripts/prepare_tcga_train_csv.py
+scripts/build_hnscc_scoreboard.py
 scripts/compare_hnscc_stage_policies.py
 scripts/tune_hnscc_thresholds.py
 scripts/ablate_heavy_augmentation.py
@@ -67,12 +69,25 @@ tests/test_stage_selection.py
 tests/test_til_threshold.py
 tests/test_methodology_registry.py
 tests/test_organize_workspace.py
+tests/test_scoreboard.py
 ```
 
 ## 3. 最終比較結果（AUC／PRC）
 
-完整表：[`hnscc_methodology_comparison_table.md`](hnscc_methodology_comparison_table.md)  
-數值來源：`results/results_methodology_comparison_auc_prc_full/`、`results/results_oof_with_prc/`
+**Living scoreboard（分主題、持續更新）：[`hnscc_living_scoreboard.md`](hnscc_living_scoreboard.md)**  
+登錄：`configs/scoreboard_experiments.yaml`  
+再生（Docker TIL）：
+
+```bash
+docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
+  --registry configs/scoreboard_experiments.yaml \
+  --results-root results \
+  --output-md docs/hnscc_living_scoreboard.md \
+  --output-csv results/results_methodology_comparison_scoreboard/scoreboard.csv
+```
+
+方法學摘要表：[`hnscc_methodology_comparison_table.md`](hnscc_methodology_comparison_table.md)（指向 scoreboard）  
+敘事報告：[`hnscc_groupcv_optimization_report.md`](hnscc_groupcv_optimization_report.md)
 
 本表以舊 no-mix candidate 為比較參考（方法學全實驗）。Source mix 比例細節見下節。
 

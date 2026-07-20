@@ -1,0 +1,139 @@
+# HNSCC Living Scoreboard experiment registry.
+# Paths are relative to --results-root (default: results/).
+# Regenerate: docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py
+
+candidate_id: candidate_source_mix_tcga_r50_50
+
+chapters:
+  - id: leaderboard
+    title: 目前候選與全域排行
+    include_all: true
+
+  - id: baseline_old
+    title: Baseline / old_base
+    experiments:
+      - id: old_base_fold04_hne_on
+        display_name: old_base fold04_stage2 (H&E on)
+        oof_path: results_old_base_qupath_fold04_hne_on/oof_summary
+      - id: old_base_fold04_hne_off
+        display_name: old_base fold04_stage2 (H&E off)
+        oof_path: results_old_base_qupath_fold04_hne_off/oof_summary
+      - id: groupcv_baseline_hne_on
+        display_name: GroupCV baseline (H&E on / heavy / weight on)
+        oof_path: results_groupcv_norm_heavy/oof_stage_selected
+      - id: groupcv_stage0_pretrained
+        display_name: GroupCV Stage 0 pretrained (H&E on)
+        oof_path: results_groupcv_norm_heavy/oof_stage_0
+      - id: groupcv_candidate_nohne
+        display_name: GroupCV candidate (H&E off / heavy / weight on)
+        oof_path: results_groupcv_nohne_heavy/oof_stage_selected
+
+  - id: a1_hne
+    title: A1 H&E normalization
+    experiments:
+      - id: a1_hne_on
+        display_name: H&E on / heavy / weight on
+        oof_path: results_groupcv_norm_heavy/oof_stage_selected
+      - id: a1_hne_off
+        display_name: H&E off / heavy / weight on
+        oof_path: results_groupcv_nohne_heavy/oof_stage_selected
+
+  - id: a2_aug
+    title: A2 Augmentation 強度（heavy vs medium）
+    experiments:
+      - id: a2_heavy
+        display_name: H&E off / heavy / weight on
+        oof_path: results_groupcv_nohne_heavy/oof_stage_selected
+      - id: a2_medium
+        display_name: H&E off / medium / weight on
+        oof_path: results_groupcv_nohne_medium/oof_stage_selected
+
+  - id: a3_weight
+    title: A3 Class weight
+    experiments:
+      - id: a3_weight_on
+        display_name: H&E off / heavy / weight on
+        oof_path: results_groupcv_nohne_heavy/oof_stage_selected
+      - id: a3_weight_off
+        display_name: H&E off / heavy / weight off
+        oof_path: results_groupcv_nohne_heavy_noweight/oof_stage_selected
+
+  - id: b2_stage
+    title: B2 Stage 選擇策略
+    experiments:
+      - id: stage_validation_multiclass_auc
+        display_name: validation multiclass AUC（selected）
+        oof_path: results_oof_with_prc/stage_validation_multiclass_auc
+      - id: stage_validation_positive_auc
+        display_name: validation positive AUC
+        oof_path: results_oof_with_prc/stage_validation_positive_auc
+      - id: stage_validation_macro_ovr_auc
+        display_name: validation macro OVR AUC
+        oof_path: results_oof_with_prc/stage_validation_macro_ovr_auc
+      - id: stage_composite_positive_macro
+        display_name: composite positive macro
+        oof_path: results_oof_with_prc/stage_composite_positive_macro
+      - id: stage_fixed_stage1
+        display_name: fixed Stage 1
+        oof_path: results_oof_with_prc/stage_fixed_stage1
+      - id: stage_fixed_stage2
+        display_name: fixed Stage 2
+        oof_path: results_oof_with_prc/stage_fixed_stage2
+      - id: candidate_selected
+        display_name: validation-selected（no-mix 候選）
+        oof_path: results_oof_with_prc/candidate_selected
+
+  - id: loss_sampler
+    title: Loss / sampler
+    experiments:
+      - id: focal_gamma1
+        display_name: focal loss γ=1
+        oof_path: results_oof_with_prc/focal_gamma1
+      - id: focal_gamma2
+        display_name: focal loss γ=2
+        oof_path: results_oof_with_prc/focal_gamma2
+      - id: logit_adjusted_ce
+        display_name: logit-adjusted CE
+        oof_path: results_oof_with_prc/logit_adjusted_ce
+      - id: balanced_sampler
+        display_name: balanced sampler
+        oof_path: results_oof_with_prc/balanced_sampler
+
+  - id: aug_ablation
+    title: Heavy-aug component ablation
+    experiments:
+      - id: aug_without_geometric
+        display_name: without geometric
+        oof_path: results_oof_with_prc/aug_without_geometric
+      - id: aug_without_hed
+        display_name: without HED
+        oof_path: results_oof_with_prc/aug_without_hed
+      - id: aug_without_blur_noise
+        display_name: without blur/noise
+        oof_path: results_oof_with_prc/aug_without_blur_noise
+      - id: aug_without_cutout
+        display_name: without cutout
+        oof_path: results_oof_with_prc/aug_without_cutout
+
+  - id: source_mix
+    title: Source mix 混入比例
+    experiments:
+      - id: source_mix_tcga_r90_10
+        display_name: HNSCC:TCGA = 0.90:0.10
+        oof_path: results_oof_with_prc/source_mix_tcga_r90_10
+      - id: source_mix_tcga_r75_25
+        display_name: HNSCC:TCGA = 0.75:0.25
+        oof_path: results_oof_with_prc/source_mix_tcga
+      - id: candidate_source_mix_tcga_r50_50
+        display_name: HNSCC:TCGA = 0.50:0.50（目前候選）
+        oof_path: results_oof_with_prc/source_mix_tcga_r50_50
+      - id: source_mix_tcga_r25_75
+        display_name: HNSCC:TCGA = 0.25:0.75
+        oof_path: results_oof_with_prc/source_mix_tcga_r25_75
+
+  - id: threshold
+    title: Threshold TIL（參考）
+    experiments:
+      - id: threshold_til
+        display_name: validation-tuned TIL thresholds
+        oof_path: results_oof_with_prc/threshold_til
