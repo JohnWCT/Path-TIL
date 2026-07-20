@@ -1,0 +1,37 @@
+experiment:
+  name: source_pretrain_swin_tiny
+
+data:
+  train_csv: tcga_train_dataset.csv
+  val_csv: tcga_test_dataset.csv
+  train_root: dataset/train
+  val_root: dataset/test
+
+model:
+  backbone: swin_tiny
+  input_size: 224
+  num_classes: 3
+  imagenet_init: true
+  dropout: 0.3
+
+preprocessing:
+  hne_norm: false
+  augmentation: heavy
+
+training:
+  batch_size: 32
+  epochs_head: 10
+  epochs_finetune: 30
+  learning_rate_head: 0.0003
+  learning_rate_finetune: 0.0001
+  class_weight: true
+  patience: 8
+  seed: 42
+
+output:
+  save_dir: baselines/source_pretrain_swin_tiny
+  save_best_name: source_pretrained_swin_tiny_best.h5
+
+notes: >
+  Placeholder config for optional PyTorch/timm Swin-Tiny pipeline. Not used in
+  the first TensorFlow backbone screening round.

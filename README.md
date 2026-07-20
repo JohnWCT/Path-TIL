@@ -181,8 +181,52 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 - [方法學優化工作流程（loss / sampler / stage / threshold）](docs/hnscc_methodology_optimization.md)
 - [Living Scoreboard（分主題分數比較，持續更新）](docs/hnscc_living_scoreboard.md)
 - [方法學比較摘要](docs/hnscc_methodology_comparison_table.md)
+- [External lock-box 報告模板](docs/hnscc_external_lockbox_report.md)
+- [Seed stability 報告模板](docs/hnscc_candidate_stability_report.md)
+
+### HNSCC Candidate and Backbone Roadmap
+
+Current candidate:
 
 ```text
+Backbone: InceptionResNetV2
+H&E normalization: off
+Augmentation: heavy
+Class weight: on
+Source mix: HNSCC:TCGA = 0.50:0.50
+Primary metrics: positive AUC / positive PRC
+```
+
+Current OOF candidate result:
+
+```text
+positive AUC = 0.8848
+positive PRC = 0.4196
+```
+
+Next roadmap:
+
+1. Keep the current InceptionResNetV2 candidate as reference.
+2. Run TCGA internal and Testset external lock-box evaluation.
+3. Run seed stability and L2-SP on the current candidate.
+4. Pretrain new backbones on `dataset/train` and validate on `dataset/test`.
+5. Keep `dataset/Testset` locked for final external evaluation.
+6. Screen EfficientNetV2-S and ConvNeXt-Tiny with fold 0 + fold 1.
+7. Run full 5-fold only for the best 1–2 backbone settings.
+
+```bash
+# A1–A2: robustness checks (report-only external)
+python3 scripts/eval_tcga_internal.py \
+  --model-dir results/results_method_source_mix_tcga_r50_50 \
+  --test-root dataset/test \
+  --output-dir results/results_tcga_internal_r50_50
+
+python3 scripts/eval_external_testset.py \
+  --model-dir results/results_method_source_mix_tcga_r50_50 \
+  --testset-root dataset/Testset \
+  --output-dir results/results_external_testset_r50_50
+```
+
 每個 fold：7 train cases + 1 validation case + 2 held-out test cases
 5 folds：每個 case 恰好作為 held-out test 一次
 模型選擇：只使用 validation AUC

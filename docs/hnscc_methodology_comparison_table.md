@@ -4,6 +4,15 @@
 
 該文件涵蓋 GroupCV 報告（A1–A3、old_base、stage）與方法學優化（loss、sampler、aug ablation、source mix、threshold），並以目前候選 **Source mix 0.50:0.50**（AUC 0.8848／PRC 0.4196）計算 Δ 與 keep/drop。
 
+## 下一步（A 線 + B 線，已實作腳本）
+
+| 主題 | 文件／腳本 |
+|---|---|
+| External lock-box 報告 | [`hnscc_external_lockbox_report.md`](hnscc_external_lockbox_report.md) |
+| Seed stability 報告 | [`hnscc_candidate_stability_report.md`](hnscc_candidate_stability_report.md) |
+| 完整路線說明 | [`hnscc_methodology_optimization.md` §6](hnscc_methodology_optimization.md) |
+| Backbone vs candidate | `scripts/compare_backbone_and_candidate.py` |
+
 ## Source mix 比例（相對 0.75:0.25）
 
 | 設定 | Positive AUC | Positive PRC | 決策 |

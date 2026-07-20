@@ -52,8 +52,22 @@ path_til/til_threshold.py
 path_til/experiment_registry.py
 path_til/paths.py
 path_til/scoreboard.py
+path_til/candidate.py
+path_til/l2sp.py
+path_til/external_eval.py
+path_til/backbone_registry.py
+path_til/model_factory.py
+path_til/source_pretrain.py
 path_til/backbones/
 scripts/train_hnscc_method.py
+scripts/eval_tcga_internal.py
+scripts/eval_external_testset.py
+scripts/train_hnscc_l2sp.py
+scripts/pretrain_source_backbone.py
+scripts/train_hnscc_backbone_source_mix.py
+scripts/compare_backbone_and_candidate.py
+scripts/summarize_candidate_stability.py
+scripts/prepare_labeled_patch_csv.py
 scripts/organize_workspace.py
 scripts/prepare_tcga_train_csv.py
 scripts/build_hnscc_scoreboard.py
@@ -70,6 +84,15 @@ tests/test_til_threshold.py
 tests/test_methodology_registry.py
 tests/test_organize_workspace.py
 tests/test_scoreboard.py
+tests/test_l2sp.py
+tests/test_external_eval.py
+tests/test_candidate_config.py
+tests/test_backbone_registry.py
+tests/test_model_factory.py
+tests/test_source_pretrain_config.py
+tests/test_no_lockbox_leakage.py
+docs/hnscc_external_lockbox_report.md
+docs/hnscc_candidate_stability_report.md
 ```
 
 ## 3. 最終比較結果（AUC／PRC）
@@ -281,10 +304,56 @@ docker exec -w /workspace TIL python3 -m unittest discover -s tests -v
 docker exec TIL python3 /workspace/scripts/organize_workspace.py --dry-run
 ```
 
-## 6. 後續可選
+## 6. 後續路線（A 線穩健優化 + B 線 backbone 替換）
 
-1. 以 Source mix **0.50:0.50**（或 PRC 備選 **0.25:0.75**）在獨立外部 cohort（`dataset/Testset`）做 final confirmation
-2. L2-SP／backbone registry／EWC
-3. 人工檢查 high-confidence false positives（見 GroupCV 報告）
+已實作 IDE 手冊骨架；**所有新實驗仍以 Source mix 0.50:0.50 為 reference**（AUC 0.8848／PRC 0.4196）。
 
-只有通過成功標準（AUC／PRC）才取代目前 candidate。
+### A 線：維持 IRV2 主幹
+
+| 步驟 | 腳本 | 說明 |
+|---|---|---|
+| A1 | `scripts/eval_tcga_internal.py` | `dataset/test` TCGA internal holdout |
+| A2 | `scripts/eval_external_testset.py` | `dataset/Testset` lock-box（**只報告、不調參**） |
+| A3 | `scripts/train_hnscc_source_mix.py` + seed configs | seed 7／21 穩定性 |
+| A4 | `scripts/train_hnscc_l2sp.py` | L2-SP λ = 1e-5／1e-4／1e-3 |
+| 彙整 | `scripts/summarize_candidate_stability.py` | seed mean±std |
+
+報告模板：[`hnscc_external_lockbox_report.md`](hnscc_external_lockbox_report.md)、[`hnscc_candidate_stability_report.md`](hnscc_candidate_stability_report.md)
+
+```bash
+# A1–A2（需已訓練 results/results_method_source_mix_tcga_r50_50）
+docker exec -w /workspace TIL python3 scripts/eval_tcga_internal.py \
+  --model-dir results/results_method_source_mix_tcga_r50_50 \
+  --test-root dataset/test \
+  --output-dir results/results_tcga_internal_r50_50
+
+docker exec -w /workspace TIL python3 scripts/eval_external_testset.py \
+  --model-dir results/results_method_source_mix_tcga_r50_50 \
+  --testset-root dataset/Testset \
+  --output-dir results/results_external_testset_r50_50
+```
+
+### B 線：backbone 替換（EfficientNetV2-S、ConvNeXt-Tiny 優先）
+
+| 步驟 | 腳本 | 說明 |
+|---|---|---|
+| B1 | `scripts/prepare_labeled_patch_csv.py` | `tcga_train_dataset.csv`／`tcga_test_dataset.csv` |
+| B2–B3 | `scripts/pretrain_source_backbone.py` | `dataset/train` 訓練、`dataset/test` 驗證 |
+| B4 | `scripts/train_hnscc_backbone_source_mix.py` | fold 0+1 smoke（0.50:0.50 mix） |
+| B5–B7 | hyperparam configs + 5-fold + external | 僅入圍 backbone |
+| 比較 | `scripts/compare_backbone_and_candidate.py` | 統一 decision 表 |
+
+Swin-Tiny 保留 placeholder config；第一輪以 TensorFlow backbone 為主。
+
+### 新增模組（本 commit）
+
+```text
+path_til/candidate.py, l2sp.py, external_eval.py, backbone_registry.py, model_factory.py, source_pretrain.py
+scripts/eval_tcga_internal.py, eval_external_testset.py, train_hnscc_l2sp.py, pretrain_source_backbone.py, ...
+configs/method_l2sp_*.yaml, method_source_mix_tcga_r50_50_seed*.yaml, source_pretrain_*.yaml
+tests/test_l2sp.py, test_external_eval.py, test_no_lockbox_leakage.py, ...
+```
+
+EWC 排在 A 線 + B 線 backbone 篩選之後；僅在 source-domain 明顯下降且 L2-SP 無效時再考慮。
+
+只有通過成功標準（AUC／PRC + TCGA／external 不明顯崩壞）才取代目前 candidate。

@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import re
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 LABEL_FOLDERS = {
@@ -28,8 +33,10 @@ def parse_args():
     )
     parser.add_argument(
         "--train-dir",
+        "--root",
+        dest="root",
         default="dataset/train",
-        help="TCGA train root with A_positive/B_negative/C_other",
+        help="Labeled patch root with A_positive/B_negative/C_other",
     )
     parser.add_argument(
         "--output",
@@ -82,13 +89,17 @@ def build_records(train_dir: Path, path_prefix: str) -> list[dict]:
 
 def main():
     args = parse_args()
-    train_dir = Path(args.train_dir)
-    if not train_dir.is_dir():
-        raise FileNotFoundError("Train dir not found: {0}".format(train_dir))
-    records = build_records(train_dir, args.path_prefix)
-    frame = pd.DataFrame(records, columns=["case_id", "image_path", "label"])
+    root = Path(args.root)
+    if not root.is_dir():
+        raise FileNotFoundError("Root not found: {0}".format(root))
+    prefix = args.path_prefix.strip()
+    if prefix and not prefix.endswith(root.as_posix()):
+        prefix = "{0}/{1}".format(prefix.rstrip("/"), root.as_posix())
+    from path_til.external_eval import build_patch_manifest
+
+    frame = build_patch_manifest(root, path_prefix=prefix)
     output = Path(args.output)
-    frame.to_csv(output, index=False)
+    frame.loc[:, ["case_id", "image_path", "label"]].to_csv(output, index=False)
     print("Wrote {0} rows, {1} cases -> {2}".format(
         len(frame), frame["case_id"].nunique(), output
     ))

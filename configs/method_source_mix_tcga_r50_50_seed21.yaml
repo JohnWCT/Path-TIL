@@ -1,0 +1,17 @@
+name: method_source_mix_tcga_r50_50_seed21
+method_type: source_mix
+hne_norm: off
+aug: heavy
+class_weight: on
+loss: weighted_ce
+sampler: random
+stage_policy: validation_multiclass_auc
+til_estimator: hard_raw
+hnscc_ratio: 0.50
+tcga_ratio: 0.50
+epochs_stage1: 30
+epochs_stage2: 30
+batch_size: 32
+seed: 21
+notes: >
+  Seed-stability replicate of the 0.50:0.50 source-mix candidate (seed=21).
