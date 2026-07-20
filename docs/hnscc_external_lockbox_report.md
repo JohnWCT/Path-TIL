@@ -1,50 +1,28 @@
 # HNSCC External Lock-Box Report
 
-> Report-only evaluation on `dataset/Testset`. Do **not** use these results for tuning.
+> Auto-updated by `scripts/update_ab_plan_reports.py` at 2026-07-20 12:22 UTC.
+> External results are report-only and must not be used for tuning.
 
-## Cohorts
+## Reference (HNSCC OOF candidate)
 
 ```text
-dataset/Testset/CPTAC_LUAD
-dataset/Testset/CPTAC_LUSC
-dataset/Testset/RUMC-BRCA
-```
-
-## Commands
-
-```bash
-python scripts/eval_tcga_internal.py \
-  --model-dir results/results_method_source_mix_tcga_r50_50 \
-  --test-root dataset/test \
-  --output-dir results/results_tcga_internal_r50_50 \
-  --stage selected
-
-python scripts/eval_external_testset.py \
-  --model-dir results/results_method_source_mix_tcga_r50_50 \
-  --testset-root dataset/Testset \
-  --output-dir results/results_external_testset_r50_50 \
-  --stage selected
+positive AUC = 0.8848
+positive PRC = 0.4196
 ```
 
 ## TCGA Internal (`dataset/test`)
 
 | metric | value |
 |---|---:|
-| positive AUC | TBD |
-| positive PRC | TBD |
-| macro OVR AUC | TBD |
-| weighted OVR AUC | TBD |
+| positive AUC | 0.9950 |
+| positive PRC | 0.9952 |
+| macro OVR AUC | 0.9968 |
+| weighted OVR AUC | 0.9971 |
 
 ## External Summary
 
 | dataset | n_patches | positive AUC | positive PRC |
 |---|---:|---:|---:|
-| CPTAC_LUAD | TBD | TBD | TBD |
-| CPTAC_LUSC | TBD | TBD | TBD |
-| RUMC-BRCA | TBD | TBD | TBD |
-
-## Decision
-
-- [ ] TCGA internal AUC/PRC acceptable vs reference training behavior
-- [ ] External lock-box shows no obvious collapse
-- [ ] Proceed to seed stability / L2-SP / backbone screening
+| CPTAC_LUAD | 3000 | 0.9886 | 0.8923 |
+| CPTAC_LUSC | 3000 | 0.9904 | 0.9748 |
+| RUMC-BRCA | 3000 | 0.9972 | 0.9629 |

@@ -85,14 +85,22 @@ def load_classifier_model(tf, base, model_path: str):
         return model
 
 
-def predict_with_models(tf, base, models, images, batch_size: int) -> np.ndarray:
+def predict_with_models(tf, base, models, images, batch_size: int, prefetch: int = 4) -> np.ndarray:
     labels = np.zeros(len(images), dtype=np.int32)
     probabilities = []
     for fold, model_path in models:
         print("Predicting with fold {0}: {1}".format(fold, model_path))
         model = load_classifier_model(tf, base, str(model_path))
-        sequence = base.nonaug_sequence(tf, images, labels, batch_size)
-        fold_probs = np.asarray(model.predict(sequence, verbose=1), dtype=np.float64)
+        dataset = tf.data.Dataset.from_tensor_slices((images, labels))
+        dataset = dataset.batch(batch_size)
+
+        def prepare(batch_images, batch_labels):
+            values = tf.cast(batch_images, tf.float32) / 255.0
+            return values, batch_labels
+
+        dataset = dataset.map(prepare, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.prefetch(prefetch)
+        fold_probs = np.asarray(model.predict(dataset, verbose=1), dtype=np.float64)
         probabilities.append(fold_probs)
         del model
         tf.keras.backend.clear_session()
@@ -128,6 +136,7 @@ def evaluate_manifest(
     batch_size: int,
     hne_norm: bool | None,
     image_workers: int,
+    prefetch_batches: int = 4,
 ):
     base = load_train_base()
     tf = setup_tensorflow()
@@ -138,7 +147,9 @@ def evaluate_manifest(
         hne_norm = read_training_hne_norm(model_dir)
     frame = resolve_disk_paths(manifest, data_root)
     images, report = load_manifest_images(base, frame, hne_norm, image_workers)
-    probabilities = predict_with_models(tf, base, models, images, batch_size)
+    probabilities = predict_with_models(
+        tf, base, models, images, batch_size, prefetch=prefetch_batches
+    )
     predictions = build_prediction_frame(frame, probabilities)
     metrics = patch_evaluation_metrics(
         predictions["y_true_idx"].to_numpy(),

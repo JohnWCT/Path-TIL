@@ -60,10 +60,18 @@ def parse_args():
     parser.add_argument("--hnscc-ratio", type=float, default=None)
     parser.add_argument("--tcga-ratio", type=float, default=None)
     parser.add_argument("--fold", action="append", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--epochs-stage1", type=int, default=None)
     parser.add_argument("--epochs-stage2", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--image-workers", type=int, default=None)
+    parser.add_argument("--fit-workers", type=int, default=None)
+    parser.add_argument(
+        "--use-multiprocessing",
+        choices=("on", "off"),
+        default=None,
+    )
     return parser.parse_args()
 
 
@@ -170,6 +178,20 @@ def build_namespace(cli, method):
         else float(method.get("tcga_ratio", 0.25))
     )
     validate_ratio(hnscc_ratio, tcga_ratio)
+    cpu = max(1, os.cpu_count() or 1)
+    image_workers = (
+        cli.image_workers
+        if cli.image_workers is not None
+        else min(14, max(4, cpu - 2))
+    )
+    fit_workers = (
+        cli.fit_workers if cli.fit_workers is not None else max(2, min(6, cpu // 3))
+    )
+    use_multiprocessing = (
+        cli.use_multiprocessing
+        if cli.use_multiprocessing is not None
+        else ("on" if fit_workers > 1 else "off")
+    )
     return argparse.Namespace(
         csv=cli.csv_hnscc,
         fold_csv=cli.fold_csv,
@@ -195,9 +217,9 @@ def build_namespace(cli, method):
             else int(method.get("batch_size", 32))
         ),
         seed=int(method.get("seed", 42)),
-        image_workers=min(8, max(1, os.cpu_count() or 1)),
-        fit_workers=1,
-        use_multiprocessing="off",
+        image_workers=image_workers,
+        fit_workers=fit_workers,
+        use_multiprocessing=use_multiprocessing,
         mixed_precision="off",
         patience=10,
         dry_run=cli.dry_run,
@@ -282,6 +304,8 @@ def make_source_mix_fold_config(args, frame, assignments, fold, folds, summary):
 def main():
     cli = parse_args()
     method = load_method_config(cli.config)
+    if cli.seed is not None:
+        method["seed"] = int(cli.seed)
     args = build_namespace(cli, method)
     base.validate_args(args)
     install_source_mix_split()

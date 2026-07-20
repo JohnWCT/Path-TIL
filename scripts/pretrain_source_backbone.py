@@ -19,6 +19,7 @@ import pandas as pd
 import yaml
 
 from path_til.external_eval import patch_evaluation_metrics  # noqa: E402
+from path_til.gpu_profile import detect_gpu_profile  # noqa: E402
 from path_til.hnscc import LABELS, balanced_class_weights  # noqa: E402
 from path_til.model_factory import build_classifier  # noqa: E402
 from path_til.source_pretrain import (  # noqa: E402
@@ -45,6 +46,8 @@ def parse_args():
     parser.add_argument("--train-csv", default=None)
     parser.add_argument("--val-csv", default=None)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--image-workers", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -99,6 +102,17 @@ def main():
     cli = parse_args()
     config = load_source_pretrain_config(cli.config)
     validate_no_testset_leakage(config)
+    profile = detect_gpu_profile()
+    batch_size = (
+        cli.batch_size
+        if cli.batch_size is not None
+        else int(config["training"].get("batch_size", profile["batch_size_pretrain"]))
+    )
+    workers = (
+        cli.image_workers
+        if cli.image_workers is not None
+        else profile["image_workers"]
+    )
     train_csv = cli.train_csv or config["data"]["train_csv"]
     val_csv = cli.val_csv or config["data"]["val_csv"]
     output_dir = Path(cli.output_dir)
@@ -118,8 +132,6 @@ def main():
     tf = setup_tensorflow()
     hne_norm = bool(config.get("preprocessing", {}).get("hne_norm", False))
     aug = config.get("preprocessing", {}).get("augmentation", "heavy")
-    batch_size = int(config["training"]["batch_size"])
-    workers = min(8, max(1, __import__("os").cpu_count() or 1))
     seed = int(config.get("training", {}).get("seed", 42))
     random.seed(seed)
     np.random.seed(seed)

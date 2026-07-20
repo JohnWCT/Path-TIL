@@ -41,6 +41,13 @@ def parse_args():
     parser.add_argument("--epochs-stage1", type=int, default=None)
     parser.add_argument("--epochs-stage2", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--image-workers", type=int, default=None)
+    parser.add_argument("--fit-workers", type=int, default=None)
+    parser.add_argument(
+        "--use-multiprocessing",
+        choices=("on", "off"),
+        default=None,
+    )
     return parser.parse_args()
 
 
