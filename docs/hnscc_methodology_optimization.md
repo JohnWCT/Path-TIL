@@ -140,6 +140,17 @@ docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
 4. TIL MAE 僅參考；本輪 keep/drop 不依賴 MAE。
 5. 後續比較請以 `CANDIDATE_REFERENCE`（0.50:0.50）為準。
 
+### Seed stability（A3，source mix 0.50:0.50）
+
+| seed | Positive AUC | Positive PRC |
+|---:|---:|---:|
+| 42（candidate） | 0.8848 | 0.4196 |
+| 7 | 0.8604 | 0.3905 |
+| 21 | 0.8685 | 0.4056 |
+| **mean ± std** | **0.8712 ± 0.0101** | **0.4052 ± 0.0119** |
+
+候選對 seed 有中等敏感度（AUC std ≈ 0.01）。正式報告建議寫 mean±std；單一次 seed42 的 0.8848 不宜當成精確點估計。詳見 [`hnscc_candidate_stability_report.md`](hnscc_candidate_stability_report.md)。
+
 ### Source mix：不同 TCGA 混入量比較
 
 數值來源：`results/results_methodology_comparison_source_mix_ratios/`  

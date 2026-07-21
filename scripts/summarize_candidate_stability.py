@@ -50,16 +50,58 @@ def load_oof_metrics(oof_dir: Path) -> dict:
             "weighted_ovr_auc": payload.get("weighted_ovr_auc"),
             "hard_til_mae": payload.get("hard_til_mae"),
         }
+
+    eval_summary = oof_dir / "eval_summary.json"
+    if eval_summary.is_file():
+        payload = json.loads(eval_summary.read_text(encoding="utf-8"))
+        patch = payload.get("patch_metrics", {})
+        slide = payload.get("slide_metrics", {})
+        hard = (
+            slide.get("hard_til_mae", {})
+            if isinstance(slide.get("hard_til_mae"), dict)
+            else {}
+        )
+
+        def nested_value(*keys):
+            for key in keys:
+                item = patch.get(key)
+                if isinstance(item, dict) and "value" in item:
+                    return item["value"]
+                if item is not None and not isinstance(item, dict):
+                    return item
+            return None
+
+        return {
+            "experiment": oof_dir.name,
+            "path": str(oof_dir),
+            "positive_auc": nested_value(
+                "positive_vs_rest_auc_positive_binary",
+                "ovr_auc_positive_none",
+            ),
+            "positive_prc": nested_value(
+                "positive_vs_rest_average_precision_positive_binary",
+                "ovr_average_precision_positive_none",
+            ),
+            "macro_ovr_auc": nested_value("ovr_auc_macro"),
+            "weighted_ovr_auc": nested_value("ovr_auc_weighted"),
+            "hard_til_mae": hard.get("value"),
+        }
+
     summary_path = oof_dir / "patch_metric_summary.csv"
     if not summary_path.is_file():
+        summary_path = oof_dir / "patch_auc_summary.csv"
+    if not summary_path.is_file():
         raise FileNotFoundError(
-            "Missing OOF metrics in {0}; expected oof_metrics.json or patch_metric_summary.csv".format(
-                oof_dir
-            )
+            "Missing OOF metrics in {0}; expected oof_metrics.json, "
+            "eval_summary.json, or patch_*summary.csv".format(oof_dir)
         )
     summary = pd.read_csv(summary_path)
     lookup = {
-        (row["metric"], row.get("class", ""), row.get("average", "")): row["value"]
+        (
+            row["metric"],
+            "" if pd.isna(row.get("class", "")) else str(row.get("class", "")),
+            "" if pd.isna(row.get("average", "")) else str(row.get("average", "")),
+        ): row["value"]
         for _, row in summary.iterrows()
     }
     return {

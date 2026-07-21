@@ -16,7 +16,11 @@ if str(PROJECT_ROOT) not in sys.path:
 import numpy as np
 
 from path_til.experiment_registry import load_method_config  # noqa: E402
-from path_til.l2sp import l2sp_penalty, snapshot_trainable_weights  # noqa: E402
+from path_til.l2sp import (  # noqa: E402
+    l2sp_penalty_from_pairs,
+    matched_l2sp_pairs,
+    snapshot_weights_by_name,
+)
 from scripts import train_hnscc_source_mix as source_mix  # noqa: E402
 
 
@@ -51,21 +55,35 @@ def parse_args():
     return parser.parse_args()
 
 
-def install_l2sp_training(lambda_l2sp: float):
+def install_l2sp_training(lambda_l2sp: float, pretrained_path: str):
+    """Patch compile/load so L2-SP anchors to the original pretrained weights.
+
+    Snapshot is taken once per fold from the source pretrained checkpoint (all
+    weights by normalized name). Stage-2 unfreezing then still matches by key,
+    avoiding shape mismatches from zip-aligned trainable lists.
+    """
     base = source_mix.base
     original_compile = base.compile_model
     original_train_fold = base.train_fold
     original_load = base.load_and_validate_model
-    state = {"theta_star": None, "snapshot_taken": False}
+    state = {"theta_star": None}
 
     def patched_compile_model(tf, model, learning_rate, auc_class):
         if lambda_l2sp <= 0.0 or state["theta_star"] is None:
             return original_compile(tf, model, learning_rate, auc_class)
         base_loss = tf.keras.losses.SparseCategoricalCrossentropy()
+        # Match in Python before entering the TF graph so stage2 unfreeze
+        # cannot zip mismatched tensors by position.
+        pairs = matched_l2sp_pairs(model, state["theta_star"])
+        print(
+            "L2-SP: matched {0}/{1} trainable variables to source snapshot".format(
+                len(pairs), len(model.trainable_variables)
+            )
+        )
 
         def loss_fn(y_true, y_pred):
             loss = base_loss(y_true, y_pred)
-            return loss + lambda_l2sp * l2sp_penalty(model, state["theta_star"])
+            return loss + lambda_l2sp * l2sp_penalty_from_pairs(pairs)
 
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate),
@@ -78,14 +96,23 @@ def install_l2sp_training(lambda_l2sp: float):
 
     def patched_load_and_validate_model(tf, path, mixed_precision):
         model = original_load(tf, path, mixed_precision)
-        if not state["snapshot_taken"]:
-            state["theta_star"] = snapshot_trainable_weights(model)
-            state["snapshot_taken"] = True
+        # Capture theta* only from the original pretrained file; never from
+        # stage1_best / stage2 reloads.
+        if state["theta_star"] is None and Path(path).resolve() == Path(
+            pretrained_path
+        ).resolve():
+            state["theta_star"] = snapshot_weights_by_name(model)
         return model
 
     def patched_train_fold(tf, auc_class, args, frame, assignments, images, fold, config):
-        state["snapshot_taken"] = False
         state["theta_star"] = None
+        # Explicit source-domain snapshot before any fine-tuning in this fold.
+        source_model = original_load(
+            tf, pretrained_path, base.on_off(args.mixed_precision)
+        )
+        state["theta_star"] = snapshot_weights_by_name(source_model)
+        del source_model
+        tf.keras.backend.clear_session()
         return original_train_fold(
             tf, auc_class, args, frame, assignments, images, fold, config
         )
@@ -101,7 +128,7 @@ def main():
     if cli.seed is not None:
         method["seed"] = int(cli.seed)
     lambda_l2sp = float(method.get("lambda_l2sp", 0.0))
-    install_l2sp_training(lambda_l2sp)
+    install_l2sp_training(lambda_l2sp, cli.pretrained)
 
     args = source_mix.build_namespace(cli, method)
     if cli.fold is not None:

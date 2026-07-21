@@ -5,7 +5,12 @@ try:
 except ImportError:  # pragma: no cover - host without TF
     tf = None
 
-from path_til.l2sp import l2sp_penalty, snapshot_trainable_weights
+from path_til.l2sp import (
+    l2sp_penalty,
+    matched_l2sp_pairs,
+    snapshot_trainable_weights,
+    snapshot_weights_by_name,
+)
 
 
 @unittest.skipIf(tf is None, "tensorflow not installed")
@@ -23,3 +28,22 @@ class L2SPTests(unittest.TestCase):
             variable.assign_add(tf.ones_like(variable) * 0.01)
         penalty = l2sp_penalty(model, theta_star)
         self.assertGreater(float(penalty.numpy()), 0.0)
+
+    def test_name_keyed_snapshot_survives_trainable_set_change(self):
+        inputs = tf.keras.Input(shape=(4,))
+        hidden = tf.keras.layers.Dense(8, name="hidden")(inputs)
+        outputs = tf.keras.layers.Dense(3, name="head")(hidden)
+        model = tf.keras.Model(inputs, outputs)
+        theta_star = snapshot_weights_by_name(model)
+
+        model.get_layer("hidden").trainable = False
+        penalty_head_only = l2sp_penalty(model, theta_star)
+        self.assertEqual(float(penalty_head_only.numpy()), 0.0)
+
+        model.get_layer("hidden").trainable = True
+        for variable in model.trainable_variables:
+            variable.assign_add(tf.ones_like(variable) * 0.01)
+        pairs = matched_l2sp_pairs(model, theta_star)
+        self.assertEqual(len(pairs), len(model.trainable_variables))
+        penalty_full = l2sp_penalty(model, theta_star)
+        self.assertGreater(float(penalty_full.numpy()), 0.0)

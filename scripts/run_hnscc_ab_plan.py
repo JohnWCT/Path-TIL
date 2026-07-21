@@ -449,21 +449,29 @@ def phase_summary(profile: dict, dry_run: bool, skip_existing: bool) -> None:
         RESULTS / "results_external_testset_r50_50",
     ]
     if CANDIDATE_OOF.is_dir():
-        run_cmd(
-            [
-                "python3",
-                "scripts/compare_backbone_and_candidate.py",
-                "--reference",
-                str(CANDIDATE_OOF),
-                "--experiments",
-                *[str(path) for path in smoke_oofs if path.is_dir()],
-                "--external-results",
-                *[str(path) for path in ext_dirs if path.is_dir()],
-                "--output",
-                str(compare_out),
-            ],
-            dry_run,
-        )
+        compare_experiments = [str(path) for path in smoke_oofs if path.is_dir()]
+        # Always include L2-SP OOF dirs when present.
+        for tag in ("1e-5", "1e-4", "1e-3"):
+            path = RESULTS / "results_oof_with_prc" / "l2sp_r50_50_lambda_{0}".format(tag)
+            if path.is_dir():
+                compare_experiments.append(str(path))
+        cmd = [
+            "python3",
+            "scripts/compare_backbone_and_candidate.py",
+            "--reference",
+            str(CANDIDATE_OOF),
+            "--output",
+            str(compare_out),
+        ]
+        if compare_experiments:
+            cmd.extend(["--experiments", *compare_experiments])
+        else:
+            # Compare script requires --experiments; reuse reference as placeholder.
+            cmd.extend(["--experiments", str(CANDIDATE_OOF)])
+        external_existing = [str(path) for path in ext_dirs if path.is_dir()]
+        if external_existing:
+            cmd.extend(["--external-results", *external_existing])
+        run_cmd(cmd, dry_run)
     run_cmd(["python3", "scripts/update_ab_plan_reports.py"], dry_run)
 
 
