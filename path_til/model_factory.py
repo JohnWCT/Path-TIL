@@ -42,3 +42,29 @@ def build_classifier(
     features = tf.keras.layers.Dropout(dropout)(features)
     outputs = tf.keras.layers.Dense(num_classes, activation="softmax")(features)
     return tf.keras.Model(inputs=inputs, outputs=outputs, name="{0}_classifier".format(backbone))
+
+
+def load_classifier_from_checkpoint(
+    tf,
+    backbone: str,
+    path: str,
+    num_classes: int = 3,
+    dropout: float = 0.3,
+):
+    """Load a saved classifier; rebuild + load_weights when custom layers block load_model."""
+    path = str(path)
+    try:
+        return tf.keras.models.load_model(path, compile=False)
+    except (ValueError, TypeError, OSError) as error:
+        message = str(error)
+        if backbone != "convnext_tiny" and "LayerScale" not in message and "Unknown layer" not in message:
+            raise
+        model = build_classifier(
+            backbone,
+            num_classes=num_classes,
+            weights=None,
+            dropout=dropout,
+            train_backbone=True,
+        )
+        model.load_weights(path)
+        return model

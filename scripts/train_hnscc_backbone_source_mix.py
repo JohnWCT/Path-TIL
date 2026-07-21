@@ -19,7 +19,7 @@ import yaml
 
 from path_til.experiment_registry import load_method_config  # noqa: E402
 from path_til.hnscc import LABELS, balanced_class_weights  # noqa: E402
-from path_til.model_factory import build_classifier  # noqa: E402
+from path_til.model_factory import build_classifier, load_classifier_from_checkpoint  # noqa: E402
 from scripts import train_hnscc_source_mix as source_mix  # noqa: E402
 from scripts._eval_patch_manifest import load_train_base, setup_tensorflow  # noqa: E402
 
@@ -45,6 +45,10 @@ def parse_args():
     parser.add_argument("--aug", default="heavy")
     parser.add_argument("--hne-norm", choices=("on", "off"), default="off")
     parser.add_argument("--class-weight", choices=("on", "off"), default="on")
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--image-workers", type=int, default=None)
+    parser.add_argument("--fit-workers", type=int, default=None)
+    parser.add_argument("--use-multiprocessing", choices=("on", "off"), default=None)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -122,7 +126,13 @@ def train_backbone_fold(tf, base, settings, mixed, assignments, images, fold, ou
 
     model_path = Path(settings["pretrained"])
     if model_path.is_file():
-        model = tf.keras.models.load_model(str(model_path), compile=False)
+        model = load_classifier_from_checkpoint(
+            tf,
+            settings["backbone"],
+            str(model_path),
+            num_classes=len(LABELS),
+            dropout=settings["dropout"],
+        )
     else:
         model = build_classifier(
             settings["backbone"],
@@ -161,7 +171,7 @@ def train_backbone_fold(tf, base, settings, mixed, assignments, images, fold, ou
         verbose=1,
     )
     base.save_learning_curve(history1, fold_dir / "stage1_learning_curve.png", "Fold {0}".format(fold))
-    model = tf.keras.models.load_model(stage1_path, compile=False)
+    # restore_best_weights=True keeps the best stage-1 weights in memory.
     model.trainable = True
     model.compile(
         optimizer=tf.keras.optimizers.Adam(settings["learning_rate"] * 0.1),
@@ -194,7 +204,16 @@ def train_backbone_fold(tf, base, settings, mixed, assignments, images, fold, ou
     stage_metrics = {}
     validation_keras_auc = {}
     for stage, path in ((1, stage1_path), (2, stage2_path)):
-        stage_model = tf.keras.models.load_model(path, compile=False)
+        if stage == 2:
+            stage_model = model
+        else:
+            stage_model = load_classifier_from_checkpoint(
+                tf,
+                settings["backbone"],
+                str(path),
+                num_classes=len(LABELS),
+                dropout=settings["dropout"],
+            )
         stage_model.compile(
             optimizer=tf.keras.optimizers.Adam(settings["learning_rate"]),
             loss="sparse_categorical_crossentropy",
@@ -253,6 +272,18 @@ def main():
     folds = cli.folds if cli.folds is not None else list(range(5))
     output_dir = Path(cli.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    from path_til.gpu_profile import detect_gpu_profile  # noqa: E402
+
+    profile = detect_gpu_profile()
+    workers = (
+        cli.image_workers
+        if cli.image_workers is not None
+        else profile["image_workers"]
+    )
+    if cli.batch_size is not None:
+        settings["batch_size"] = cli.batch_size
+    else:
+        settings["batch_size"] = profile["batch_size_train_backbone"]
     source_mix.base.write_json(
         output_dir / "backbone_source_mix_summary.json",
         {"settings": settings, "folds": folds},
@@ -269,7 +300,7 @@ def main():
     images, _ = base.load_all_images(
         mixed["image_path"].tolist(),
         settings["hne_norm"],
-        min(8, max(1, __import__("os").cpu_count() or 1)),
+        workers,
     )
     for fold in folds:
         train_backbone_fold(tf, base, settings, mixed, assignments, images, fold, output_dir)

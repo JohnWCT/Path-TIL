@@ -31,6 +31,21 @@
 | 21 | 0.8685 | 0.4056 |
 | mean±std | 0.8712±0.0101 | 0.4052±0.0119 |
 
+## L2-SP（0.50:0.50）
+
+| λ | Positive AUC | Positive PRC | 決策 |
+|---:|---:|---:|---|
+| 1e-5 | 0.8319 | 0.3575 | drop |
+| 1e-4 | 0.8283 | 0.3540 | drop |
+| 1e-3 | 0.8628 | 0.4095 | drop |
+
+## Backbone smoke（fold 0+1）
+
+| backbone | smoke AUC | smoke PRC | 備註 |
+|---|---:|---:|---|
+| EfficientNetV2-S | 0.8983 | 0.5448 | 快篩有趨勢；需 5-fold 確認 |
+| ConvNeXt-Tiny | 0.9004 | 0.5539 | 同上 |
+
 ## 再生指令（Docker TIL）
 
 ```bash

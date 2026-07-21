@@ -397,6 +397,7 @@ def classification_metrics(y_true, probabilities):
     """Compute multiclass metrics with safe one-vs-rest AUC handling."""
     from sklearn.metrics import (
         accuracy_score,
+        average_precision_score,
         cohen_kappa_score,
         f1_score,
         precision_score,
@@ -443,6 +444,14 @@ def classification_metrics(y_true, probabilities):
         per_class_auc[label] = value
         result["{0}_auc".format(label)] = value
     result["positive_auc"] = per_class_auc["positive"]
+    positive_idx = LABELS.index("positive")
+    positive_binary = (y_true == positive_idx).astype(np.int32)
+    try:
+        result["positive_prc"] = float(
+            average_precision_score(positive_binary, probabilities[:, positive_idx])
+        )
+    except ValueError:
+        result["positive_prc"] = None
     try:
         result["macro_ovr_auc"] = float(
             roc_auc_score(

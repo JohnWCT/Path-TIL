@@ -151,6 +151,25 @@ docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
 
 候選對 seed 有中等敏感度（AUC std ≈ 0.01）。正式報告建議寫 mean±std；單一次 seed42 的 0.8848 不宜當成精確點估計。詳見 [`hnscc_candidate_stability_report.md`](hnscc_candidate_stability_report.md)。
 
+### L2-SP（A4，source mix 0.50:0.50）
+
+| λ | Positive AUC | Positive PRC | 決策 |
+|---:|---:|---:|---|
+| 1e-5 | 0.8319 | 0.3575 | **drop** |
+| 1e-4 | 0.8283 | 0.3540 | **drop** |
+| 1e-3 | 0.8628 | 0.4095 | **drop** |
+
+解讀：三組 L2-SP 皆未達候選門檻（AUC ≥ 0.8848、PRC ≥ 0.4196）。**維持 IRV2 + source mix 0.50:0.50，不採 L2-SP。**
+
+### Backbone smoke（B4，fold 0+1 平均 test）
+
+| backbone | source val AUC | smoke AUC | smoke PRC | 決策 |
+|---|---:|---:|---:|---|
+| EfficientNetV2-S | 0.9999 | 0.8983 | 0.5448 | smoke 有趨勢；**macro OVR 未過關 → 待 5-fold** |
+| ConvNeXt-Tiny | 0.9998 | 0.9004 | 0.5539 | 同上 |
+
+比較表：`results/results_backbone_candidate_comparison/backbone_candidate_comparison.csv`。依手冊，smoke 僅快篩；**未跑完整 5-fold 前不取代 IRV2 candidate。**
+
 ### Source mix：不同 TCGA 混入量比較
 
 數值來源：`results/results_methodology_comparison_source_mix_ratios/`  
@@ -185,7 +204,9 @@ docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
 | AUC／PRC 統一比較表 | 完成 |
 | Source mix（TCGA `dataset/train`，0.75:0.25） | 完成（曾 keep；現為比例表 reference） |
 | Source mix 多比例（0.9:0.1／0.5:0.5／0.25:0.75） | **完成** |
-| L2-SP / backbone / EWC | 未做 |
+| A 線：external／seed／L2-SP | **完成**（L2-SP 全 drop） |
+| B 線：source pretrain + smoke | **完成**（smoke 有趨勢；待 5-fold 決策） |
+| EWC | 未做 |
 
 ## 4. 執行方式
 
@@ -350,7 +371,7 @@ docker exec -w /workspace TIL python3 scripts/eval_external_testset.py \
 |---|---|---|
 | B1 | `scripts/prepare_labeled_patch_csv.py` | `tcga_train_dataset.csv`／`tcga_test_dataset.csv` |
 | B2–B3 | `scripts/pretrain_source_backbone.py` | `dataset/train` 訓練、`dataset/test` 驗證 |
-| B4 | `scripts/train_hnscc_backbone_source_mix.py` | fold 0+1 smoke（0.50:0.50 mix） |
+| B4 | `scripts/train_hnscc_backbone_source_mix.py` + `eval_backbone_smoke.py` | fold 0+1 smoke（0.50:0.50 mix） |
 | B5–B7 | hyperparam configs + 5-fold + external | 僅入圍 backbone |
 | 比較 | `scripts/compare_backbone_and_candidate.py` | 統一 decision 表 |
 
@@ -360,7 +381,7 @@ Swin-Tiny 保留 placeholder config；第一輪以 TensorFlow backbone 為主。
 
 ```text
 path_til/candidate.py, l2sp.py, external_eval.py, backbone_registry.py, model_factory.py, source_pretrain.py
-scripts/eval_tcga_internal.py, eval_external_testset.py, train_hnscc_l2sp.py, pretrain_source_backbone.py, ...
+scripts/eval_tcga_internal.py, eval_external_testset.py, train_hnscc_l2sp.py, pretrain_source_backbone.py, eval_backbone_smoke.py, run_hnscc_ab_plan.py, ...
 configs/method_l2sp_*.yaml, method_source_mix_tcga_r50_50_seed*.yaml, source_pretrain_*.yaml
 tests/test_l2sp.py, test_external_eval.py, test_no_lockbox_leakage.py, ...
 ```

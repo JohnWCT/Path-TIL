@@ -1,6 +1,6 @@
 # HNSCC External Lock-Box Report
 
-> Auto-updated by `scripts/update_ab_plan_reports.py` at 2026-07-21 01:29 UTC.
+> Auto-updated by `scripts/update_ab_plan_reports.py` at 2026-07-21 13:55 UTC.
 > External results are report-only and must not be used for tuning.
 
 ## Reference (HNSCC OOF candidate)

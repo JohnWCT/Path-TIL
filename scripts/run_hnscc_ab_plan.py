@@ -261,6 +261,31 @@ def train_l2sp(config: str, output_dir: Path, profile: dict, dry_run: bool, skip
         )
 
 
+def eval_smoke(pred_dir: Path, oof_name: str, dry_run: bool, skip_existing: bool) -> None:
+    out = RESULTS / "results_oof_with_prc" / oof_name
+    marker = out / "oof_metrics.json"
+    if skip_existing and marker.is_file():
+        log("skip smoke eval (exists): {0}".format(out))
+        return
+    if not smoke_training_complete(pred_dir):
+        log("smoke eval waiting for folds 0+1: {0}".format(pred_dir))
+        return
+    run_cmd(
+        [
+            "python3",
+            "scripts/eval_backbone_smoke.py",
+            "--pred-dir",
+            str(pred_dir),
+            "--output",
+            str(out),
+            "--folds",
+            "0",
+            "1",
+        ],
+        dry_run,
+    )
+
+
 def eval_oof(pred_dir: Path, oof_name: str, dry_run: bool, skip_existing: bool) -> None:
     out = RESULTS / "results_oof_with_prc" / oof_name
     marker = out / "oof_predictions.csv"
@@ -365,6 +390,21 @@ def phase_b3(profile: dict, dry_run: bool, skip_existing: bool) -> None:
     )
 
 
+def smoke_training_complete(out: Path) -> bool:
+    return (
+        (out / "fold00" / "fold_metrics.json").is_file()
+        and (out / "fold01" / "fold_metrics.json").is_file()
+    )
+
+
+def missing_smoke_folds(out: Path, folds=(0, 1)) -> list[int]:
+    missing = []
+    for fold in folds:
+        if not (out / "fold{0:02d}".format(fold) / "fold_metrics.json").is_file():
+            missing.append(fold)
+    return missing
+
+
 def phase_b4(profile: dict, dry_run: bool, skip_existing: bool) -> None:
     """Fold 0+1 smoke for both backbones."""
     smokes = (
@@ -372,51 +412,65 @@ def phase_b4(profile: dict, dry_run: bool, skip_existing: bool) -> None:
             "efficientnetv2_s",
             BASELINES / "source_pretrain_efficientnetv2_s" / "source_pretrained_efficientnetv2_s_best.h5",
             RESULTS / "results_backbone_smoke_efficientnetv2_s",
+            "backbone_efficientnetv2_s_smoke",
         ),
         (
             "convnext_tiny",
             BASELINES / "source_pretrain_convnext_tiny" / "source_pretrained_convnext_tiny_best.h5",
             RESULTS / "results_backbone_smoke_convnext_tiny",
+            "backbone_convnext_tiny_smoke",
         ),
     )
-    for backbone, pretrained, out in smokes:
-        marker = out / "fold01" / "fold_metrics.json"
-        if skip_existing and marker.is_file():
-            log("B4 skip: {0}".format(out))
-            continue
-        if not dry_run and not pretrained.is_file():
-            log("B4 waiting for pretrained weights: {0}".format(pretrained))
-            continue
-        run_cmd(
-            [
-                "python3",
-                "scripts/train_hnscc_backbone_source_mix.py",
-                "--backbone",
-                backbone,
-                "--csv-hnscc",
-                "qupath_dataset.csv",
-                "--csv-tcga",
-                "tcga_train_dataset.csv",
-                "--fold-csv",
-                "folds_hnscc_group5.csv",
-                "--pretrained",
-                str(pretrained),
-                "--output-dir",
-                str(out),
-                "--folds",
-                "0",
-                "1",
-                "--source-mix-ratio",
-                "0.50",
-                "--aug",
-                "heavy",
-                "--hne-norm",
-                "off",
-                "--class-weight",
-                "on",
-            ],
-            dry_run,
-        )
+    for backbone, pretrained, out, oof_name in smokes:
+        if skip_existing and smoke_training_complete(out):
+            log("B4 skip training: {0}".format(out))
+        else:
+            missing = missing_smoke_folds(out)
+            if skip_existing and not missing:
+                log("B4 skip training: {0}".format(out))
+            elif not dry_run and not pretrained.is_file():
+                log("B4 waiting for pretrained weights: {0}".format(pretrained))
+            else:
+                folds = missing if missing else [0, 1]
+                run_cmd(
+                    [
+                        "python3",
+                        "scripts/train_hnscc_backbone_source_mix.py",
+                        "--backbone",
+                        backbone,
+                        "--csv-hnscc",
+                        "qupath_dataset.csv",
+                        "--csv-tcga",
+                        "tcga_train_dataset.csv",
+                        "--fold-csv",
+                        "folds_hnscc_group5.csv",
+                        "--pretrained",
+                        str(pretrained),
+                        "--output-dir",
+                        str(out),
+                        "--folds",
+                        *[str(fold) for fold in folds],
+                        "--source-mix-ratio",
+                        "0.50",
+                        "--aug",
+                        "heavy",
+                        "--hne-norm",
+                        "off",
+                        "--class-weight",
+                        "on",
+                        "--batch-size",
+                        str(profile["batch_size_train_backbone"]),
+                        "--image-workers",
+                        str(profile["image_workers"]),
+                        "--fit-workers",
+                        str(profile["fit_workers"]),
+                        "--use-multiprocessing",
+                        "on" if profile["use_multiprocessing"] else "off",
+                    ],
+                    dry_run,
+                )
+        if smoke_training_complete(out) or dry_run:
+            eval_smoke(out, oof_name, dry_run, skip_existing)
 
 
 def phase_summary(profile: dict, dry_run: bool, skip_existing: bool) -> None:

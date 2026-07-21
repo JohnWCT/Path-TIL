@@ -21,7 +21,7 @@ import yaml
 from path_til.external_eval import patch_evaluation_metrics  # noqa: E402
 from path_til.gpu_profile import detect_gpu_profile  # noqa: E402
 from path_til.hnscc import LABELS, balanced_class_weights  # noqa: E402
-from path_til.model_factory import build_classifier  # noqa: E402
+from path_til.model_factory import build_classifier, load_classifier_from_checkpoint  # noqa: E402
 from path_til.source_pretrain import (  # noqa: E402
     load_source_pretrain_config,
     output_artifact_paths,
@@ -49,6 +49,11 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--image-workers", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--finish-only",
+        action="store_true",
+        help="Skip training; write validation metrics from an existing best checkpoint",
+    )
     return parser.parse_args()
 
 
@@ -128,6 +133,12 @@ def main():
         print("Source pretrain dry run complete -> {0}".format(output_dir))
         return
 
+    finish_only = cli.finish_only or (
+        artifacts["best"].is_file() and not artifacts["val_metrics"].is_file()
+    )
+    if finish_only and not artifacts["best"].is_file():
+        raise FileNotFoundError("finish-only requested but missing checkpoint: {0}".format(artifacts["best"]))
+
     base = load_train_base()
     tf = setup_tensorflow()
     hne_norm = bool(config.get("preprocessing", {}).get("hne_norm", False))
@@ -152,78 +163,85 @@ def main():
     backbone = config["model"]["backbone"]
     dropout = float(config["model"].get("dropout", 0.3))
     weights = "imagenet" if config["model"].get("imagenet_init", True) else None
-    model = build_classifier(
-        backbone,
-        num_classes=len(LABELS),
-        weights=weights,
-        dropout=dropout,
-        train_backbone=False,
-    )
-    train_data = make_dataset(
-        tf, base, train_images, train_labels, batch_size, True, aug, seed
-    )
     val_data = make_dataset(
         tf, base, val_images, val_labels, batch_size, False, "none", seed
     )
-    history1 = train_source_model(
-        tf,
-        base,
-        model,
-        train_data,
-        val_data,
-        int(config["training"]["epochs_head"]),
-        float(config["training"]["learning_rate_head"]),
-        class_weights,
-        output_dir / "head_best.h5",
-        int(config["training"].get("patience", 8)),
-    )
-    model = tf.keras.models.load_model(output_dir / "head_best.h5", compile=False)
-    model.trainable = True
-    for layer in model.layers:
-        if hasattr(layer, "trainable"):
-            layer.trainable = True
-    train_data = make_dataset(
-        tf, base, train_images, train_labels, batch_size, True, aug, seed + 1
-    )
-    history2 = train_source_model(
-        tf,
-        base,
-        model,
-        train_data,
-        val_data,
-        int(config["training"]["epochs_finetune"]),
-        float(config["training"]["learning_rate_finetune"]),
-        class_weights,
-        artifacts["best"],
-        int(config["training"].get("patience", 8)),
-    )
-    model.save(artifacts["last"], include_optimizer=False)
-    base.save_learning_curve(
-        history1,
-        output_dir / "source_head_learning_curve.png",
-        "Source pretrain head",
-    )
-    base.save_learning_curve(
-        history2,
-        artifacts["learning_curve"],
-        "Source pretrain finetune",
-    )
-    log_rows = []
-    for name, history in (("head", history1), ("finetune", history2)):
-        for epoch, loss in enumerate(history.history.get("loss", []), start=1):
-            log_rows.append(
-                {
-                    "phase": name,
-                    "epoch": epoch,
-                    "loss": loss,
-                    "val_loss": history.history.get("val_loss", [None])[epoch - 1],
-                    "auc": history.history.get("auc", [None])[epoch - 1],
-                    "val_auc": history.history.get("val_auc", [None])[epoch - 1],
-                }
-            )
-    pd.DataFrame(log_rows).to_csv(artifacts["training_log"], index=False)
-
-    best = tf.keras.models.load_model(artifacts["best"], compile=False)
+    if finish_only:
+        print("Source pretrain finish-only: evaluating existing checkpoint")
+        best = load_classifier_from_checkpoint(
+            tf, backbone, str(artifacts["best"]), num_classes=len(LABELS), dropout=dropout
+        )
+    else:
+        model = build_classifier(
+            backbone,
+            num_classes=len(LABELS),
+            weights=weights,
+            dropout=dropout,
+            train_backbone=False,
+        )
+        train_data = make_dataset(
+            tf, base, train_images, train_labels, batch_size, True, aug, seed
+        )
+        history1 = train_source_model(
+            tf,
+            base,
+            model,
+            train_data,
+            val_data,
+            int(config["training"]["epochs_head"]),
+            float(config["training"]["learning_rate_head"]),
+            class_weights,
+            output_dir / "head_best.h5",
+            int(config["training"].get("patience", 8)),
+        )
+        # Phase-1 uses restore_best_weights=True, so the in-memory model already
+        # holds the best head checkpoint and can continue directly to phase-2.
+        model.trainable = True
+        for layer in model.layers:
+            if hasattr(layer, "trainable"):
+                layer.trainable = True
+        train_data = make_dataset(
+            tf, base, train_images, train_labels, batch_size, True, aug, seed + 1
+        )
+        history2 = train_source_model(
+            tf,
+            base,
+            model,
+            train_data,
+            val_data,
+            int(config["training"]["epochs_finetune"]),
+            float(config["training"]["learning_rate_finetune"]),
+            class_weights,
+            artifacts["best"],
+            int(config["training"].get("patience", 8)),
+        )
+        model.save(artifacts["last"], include_optimizer=False)
+        base.save_learning_curve(
+            history1,
+            output_dir / "source_head_learning_curve.png",
+            "Source pretrain head",
+        )
+        base.save_learning_curve(
+            history2,
+            artifacts["learning_curve"],
+            "Source pretrain finetune",
+        )
+        log_rows = []
+        for name, history in (("head", history1), ("finetune", history2)):
+            for epoch, loss in enumerate(history.history.get("loss", []), start=1):
+                log_rows.append(
+                    {
+                        "phase": name,
+                        "epoch": epoch,
+                        "loss": loss,
+                        "val_loss": history.history.get("val_loss", [None])[epoch - 1],
+                        "auc": history.history.get("auc", [None])[epoch - 1],
+                        "val_auc": history.history.get("val_auc", [None])[epoch - 1],
+                    }
+                )
+        pd.DataFrame(log_rows).to_csv(artifacts["training_log"], index=False)
+        # EarlyStopping(restore_best_weights=True) keeps the best weights in memory.
+        best = model
     val_sequence = make_dataset(
         tf, base, val_images, val_labels, batch_size, False, "none", seed
     )
