@@ -73,6 +73,13 @@ def write_b5_report(path: Path, selection_csv: Path) -> None:
     promote = []
     specialist = []
     drop = []
+    selected_path = selection_csv.parent / "selected_for_full5.txt"
+    if selected_path.is_file():
+        promote = [
+            line.strip()
+            for line in selected_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
     if selection_csv.is_file():
         frame = pd.read_csv(selection_csv)
         for _, row in frame.iterrows():
@@ -91,7 +98,8 @@ def write_b5_report(path: Path, selection_csv: Path) -> None:
             decision = row.get("decision")
             name = row.get("experiment_name")
             if decision == "replace_candidate":
-                promote.append(name)
+                if name not in promote:
+                    promote.append(name)
             elif decision == "positive_specialist_pending_full5":
                 specialist.append(name)
             else:
@@ -102,9 +110,17 @@ def write_b5_report(path: Path, selection_csv: Path) -> None:
     def bullets(items):
         return ["- {0}".format(item) for item in items] if items else ["- none"]
 
-    lines.extend(["", "## Decision", "", "### promote to B6", ""])
+    lines.extend(
+        [
+            "",
+            "## Decision",
+            "",
+            "### Selected for B6 (≤1 per backbone)",
+            "",
+        ]
+    )
     lines.extend(bullets(promote))
-    lines.extend(["", "### positive-specialist only", ""])
+    lines.extend(["", "### positive-specialist (not auto-replace)", ""])
     lines.extend(bullets(specialist))
     lines.extend(["", "### drop", ""])
     lines.extend(bullets(drop))

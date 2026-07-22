@@ -46,6 +46,15 @@
 | EfficientNetV2-S | 0.8983 | 0.5448 | 快篩有趨勢；需 5-fold 確認 |
 | ConvNeXt-Tiny | 0.9004 | 0.5539 | 同上 |
 
+## Backbone B5（fold 0+1，入圍 B6）
+
+| config | positive AUC | positive PRC | decision |
+|---|---:|---:|---|
+| ConvNeXt `h6_low_lr` | 0.9033 | 0.5708 | specialist → B6 |
+| EfficientNet `h4_more_tcga` | 0.9001 | 0.5541 | specialist → B6 |
+
+B5 全 12 組皆未修復 macro/weighted OVR；**不取代 IRV2**。詳見 [`hnscc_backbone_b5_report.md`](hnscc_backbone_b5_report.md)。
+
 ## 再生指令（Docker TIL）
 
 ```bash

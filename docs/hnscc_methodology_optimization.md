@@ -206,7 +206,8 @@ docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
 | Source mix 多比例（0.9:0.1／0.5:0.5／0.25:0.75） | **完成** |
 | A 線：external／seed／L2-SP | **完成**（L2-SP 全 drop） |
 | B 線：source pretrain + smoke | **完成**（smoke 有趨勢；待 5-fold 決策） |
-| B5–B7：repair → full5 → external | **腳本已就緒**；B5 grid 待跑 |
+| B5 repair grid（12 configs） | **完成**；皆 positive-specialist；2 組入圍 B6 |
+| B6–B7：full5 → external | **進行中 / 待 B6** |
 | EWC | 未做 |
 
 ## 4. 執行方式

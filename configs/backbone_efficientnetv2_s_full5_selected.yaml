@@ -1,11 +1,14 @@
 experiment:
   name: backbone_efficientnetv2_s_full5_selected
   phase: B6
-  description: Placeholder full5 config; rewrite after B5 selection.
-
-inherit_from: configs/backbone_efficientnetv2_s_b5_h1.yaml
-
+  description: 'Selected from B5: backbone_efficientnetv2_s_b5_h4_more_tcga'
+inherit_from: configs/backbone_efficientnetv2_s_b5_h4_more_tcga.yaml
 run:
-  folds: [0, 1, 2, 3, 4]
+  folds:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
   full5: true
   external_lockbox: false

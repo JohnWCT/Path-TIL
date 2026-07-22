@@ -1,62 +1,38 @@
 # HNSCC A/B Plan Execution Status
 
 > Updated: 2026-07-22  
-> Verified: all A1–A4 / B1–B4 / SUMMARY markers present; working tree clean after refresh.  
+> Orchestrator log: `results/results_ab_plan_orchestrator/`
 
-> Orchestrator log: `results/results_ab_plan_orchestrator/orchestrator.log`
-
-## All phases complete
+## Completed
 
 | Phase | Output | Result |
 |---|---|---|
-| B1 | TCGA manifests | OK |
-| A1 | TCGA internal | AUC 0.9950 / PRC 0.9952 |
-| A2 | External lock-box | AUC ≥ 0.9886（report only） |
-| A3 | Seed 7 / 21 | mean AUC 0.8712 ± 0.0101 |
-| A4 | L2-SP ×3 | all **drop** |
-| B2 | EfficientNetV2-S pretrain | source val AUC 0.9999 |
-| B3 | ConvNeXt-Tiny pretrain | source val AUC 0.9998 |
-| B4 | Backbone smoke fold 0+1 | EfficientNet AUC 0.8983；ConvNeXt 0.9004 |
-| SUMMARY | stability + comparison + reports | OK |
+| B1–B4 / A1–A4 / SUMMARY | 見先前報告 | OK |
+| **B5** EfficientNet ×6 | `results_backbone_b5_grid_efficientnetv2_s/` | OK |
+| **B5** ConvNeXt ×6 | `results_backbone_b5_grid_convnext_tiny/` | OK |
+| **B5 selection** | `results_backbone_b5_selection/` | 2 configs → B6 |
+
+## B5 conclusion
+
+- 12/12 完成；**無人達到 `replace_candidate`**（macro/weighted OVR 仍低於 IRV2）。
+- 入圍 B6：
+  - ConvNeXt-Tiny `h6_low_lr`
+  - EfficientNetV2-S `h4_more_tcga`
+
+## In progress / next
+
+| Phase | Status |
+|---|---|
+| B6 full 5-fold（入圍 2 組） | starting |
+| B7 external lock-box | after B6 |
 
 ## Decision
 
-- Keep IRV2 + source mix 0.50:0.50 as locked candidate.
-- Backbone smoke: positive-specialist trend only; macro/weighted OVR dropped.
-- Next: **B5 repair grid** (6 configs × 2 backbones, fold 0+1), then select ≤1 per backbone for B6 full5.
-
-## B5 / B6 / B7 workflow
-
-See:
-- `docs/hnscc_backbone_b5_report.md`
-- `docs/hnscc_backbone_full5_report.md`
-- `docs/hnscc_backbone_decision_log.md`
-
-```bash
-# EfficientNetV2-S B5 grid
-docker exec -w /workspace TIL python3 scripts/run_backbone_b5_grid.py \
-  --configs configs/backbone_efficientnetv2_s_b5_h*.yaml \
-  --folds 0 1 \
-  --output-root results/results_backbone_b5_grid_efficientnetv2_s \
-  --skip-existing
-
-# ConvNeXt-Tiny B5 grid
-docker exec -w /workspace TIL python3 scripts/run_backbone_b5_grid.py \
-  --configs configs/backbone_convnext_tiny_b5_h*.yaml \
-  --folds 0 1 \
-  --output-root results/results_backbone_b5_grid_convnext_tiny \
-  --skip-existing
-```
-
+- **Keep** IRV2 + source mix 0.50:0.50 as locked candidate.
+- B5: positive-specialist only; proceed to B6 for confirmation, not auto-replace.
 
 ## Artifacts
 
-- `results/results_backbone_candidate_comparison/backbone_candidate_comparison.csv`
-- `docs/hnscc_external_lockbox_report.md`
-- `docs/hnscc_candidate_stability_report.md`
-
-## Re-run
-
-```bash
-docker exec -w /workspace TIL python3 scripts/run_hnscc_ab_plan.py --skip-existing
-```
+- `results/results_backbone_b5_selection/backbone_b5_selection.csv`
+- `docs/hnscc_backbone_b5_report.md`
+- `docs/hnscc_backbone_decision_log.md`
