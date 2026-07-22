@@ -206,6 +206,7 @@ docker exec -w /workspace TIL python3 scripts/build_hnscc_scoreboard.py \
 | Source mix 多比例（0.9:0.1／0.5:0.5／0.25:0.75） | **完成** |
 | A 線：external／seed／L2-SP | **完成**（L2-SP 全 drop） |
 | B 線：source pretrain + smoke | **完成**（smoke 有趨勢；待 5-fold 決策） |
+| B5–B7：repair → full5 → external | **腳本已就緒**；B5 grid 待跑 |
 | EWC | 未做 |
 
 ## 4. 執行方式
@@ -372,7 +373,7 @@ docker exec -w /workspace TIL python3 scripts/eval_external_testset.py \
 | B1 | `scripts/prepare_labeled_patch_csv.py` | `tcga_train_dataset.csv`／`tcga_test_dataset.csv` |
 | B2–B3 | `scripts/pretrain_source_backbone.py` | `dataset/train` 訓練、`dataset/test` 驗證 |
 | B4 | `scripts/train_hnscc_backbone_source_mix.py` + `eval_backbone_smoke.py` | fold 0+1 smoke（0.50:0.50 mix） |
-| B5–B7 | hyperparam configs + 5-fold + external | 僅入圍 backbone |
+| B5–B7 | `run_backbone_b5_grid.py` / `run_backbone_full5.py` / `eval_external_testset.py` | 修復 macro/weighted → 入圍 5-fold → lock-box |
 | 比較 | `scripts/compare_backbone_and_candidate.py` | 統一 decision 表 |
 
 Swin-Tiny 保留 placeholder config；第一輪以 TensorFlow backbone 為主。

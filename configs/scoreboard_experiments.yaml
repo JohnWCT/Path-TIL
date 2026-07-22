@@ -131,6 +131,66 @@ chapters:
         display_name: HNSCC:TCGA = 0.25:0.75
         oof_path: results_oof_with_prc/source_mix_tcga_r25_75
 
+  - id: backbone_smoke
+    title: Backbone smoke（fold 0+1 only）
+    experiments:
+      - id: backbone_efficientnetv2_s_smoke
+        display_name: EfficientNetV2-S smoke（fold 0+1）
+        oof_path: results_oof_with_prc/backbone_efficientnetv2_s_smoke
+      - id: backbone_convnext_tiny_smoke
+        display_name: ConvNeXt-Tiny smoke（fold 0+1）
+        oof_path: results_oof_with_prc/backbone_convnext_tiny_smoke
+
+  - id: backbone_b5
+    title: Backbone B5 repair experiments
+    experiments:
+      - id: efficientnetv2_s_b5_h1
+        display_name: EfficientNetV2-S B5 H1
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h1/smoke_summary
+      - id: efficientnetv2_s_b5_h2_label_smoothing
+        display_name: EfficientNetV2-S B5 H2 label smoothing
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h2_label_smoothing/smoke_summary
+      - id: efficientnetv2_s_b5_h3_lower_pos_weight
+        display_name: EfficientNetV2-S B5 H3 lower pos weight
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h3_lower_pos_weight/smoke_summary
+      - id: efficientnetv2_s_b5_h4_more_tcga
+        display_name: EfficientNetV2-S B5 H4 more TCGA
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h4_more_tcga/smoke_summary
+      - id: efficientnetv2_s_b5_h5_macro_stage
+        display_name: EfficientNetV2-S B5 H5 macro stage
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h5_macro_stage/smoke_summary
+      - id: efficientnetv2_s_b5_h6_low_lr
+        display_name: EfficientNetV2-S B5 H6 low LR
+        oof_path: results_backbone_b5_grid_efficientnetv2_s/h6_low_lr/smoke_summary
+      - id: convnext_tiny_b5_h1
+        display_name: ConvNeXt-Tiny B5 H1
+        oof_path: results_backbone_b5_grid_convnext_tiny/h1/smoke_summary
+      - id: convnext_tiny_b5_h2_label_smoothing
+        display_name: ConvNeXt-Tiny B5 H2 label smoothing
+        oof_path: results_backbone_b5_grid_convnext_tiny/h2_label_smoothing/smoke_summary
+      - id: convnext_tiny_b5_h3_lower_pos_weight
+        display_name: ConvNeXt-Tiny B5 H3 lower pos weight
+        oof_path: results_backbone_b5_grid_convnext_tiny/h3_lower_pos_weight/smoke_summary
+      - id: convnext_tiny_b5_h4_more_tcga
+        display_name: ConvNeXt-Tiny B5 H4 more TCGA
+        oof_path: results_backbone_b5_grid_convnext_tiny/h4_more_tcga/smoke_summary
+      - id: convnext_tiny_b5_h5_macro_stage
+        display_name: ConvNeXt-Tiny B5 H5 macro stage
+        oof_path: results_backbone_b5_grid_convnext_tiny/h5_macro_stage/smoke_summary
+      - id: convnext_tiny_b5_h6_low_lr
+        display_name: ConvNeXt-Tiny B5 H6 low LR
+        oof_path: results_backbone_b5_grid_convnext_tiny/h6_low_lr/smoke_summary
+
+  - id: backbone_full5
+    title: Backbone full 5-fold OOF
+    experiments:
+      - id: backbone_efficientnetv2_s_full5_selected
+        display_name: EfficientNetV2-S full 5-fold selected
+        oof_path: results_oof_with_prc/backbone_efficientnetv2_s_full5_selected
+      - id: backbone_convnext_tiny_full5_selected
+        display_name: ConvNeXt-Tiny full 5-fold selected
+        oof_path: results_oof_with_prc/backbone_convnext_tiny_full5_selected
+
   - id: threshold
     title: Threshold TIL（參考）
     experiments:

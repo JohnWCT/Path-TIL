@@ -64,6 +64,9 @@ def resolve_summary_path(oof_dir):
         return oof_dir
     for name in (
         "eval_summary.json",
+        "smoke_summary.json",
+        "oof_metrics.json",
+        "metrics.json",
         "threshold_til_summary.json",
         "oof_summary/eval_summary.json",
     ):

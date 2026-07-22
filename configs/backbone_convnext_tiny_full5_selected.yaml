@@ -1,0 +1,11 @@
+experiment:
+  name: backbone_convnext_tiny_full5_selected
+  phase: B6
+  description: Placeholder full5 config; rewrite after B5 selection.
+
+inherit_from: configs/backbone_convnext_tiny_b5_h1.yaml
+
+run:
+  folds: [0, 1, 2, 3, 4]
+  full5: true
+  external_lockbox: false

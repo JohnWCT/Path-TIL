@@ -1,0 +1,44 @@
+experiment:
+  name: backbone_convnext_tiny_b5_h5_macro_stage
+  phase: B5
+  description: macro-aware stage selection
+
+model:
+  backbone: convnext_tiny
+  pretrained: baselines/source_pretrain_convnext_tiny/source_pretrained_convnext_tiny_best.h5
+  dropout: 0.3
+  label_smoothing: 0.0
+
+data:
+  csv_hnscc: qupath_dataset.csv
+  csv_tcga: tcga_train_dataset.csv
+  fold_csv: folds_hnscc_group5.csv
+  source_mix:
+    hnscc: 0.5
+    tcga: 0.5
+
+preprocessing:
+  hne_norm: false
+  augmentation: heavy
+
+training:
+  class_weight: true
+  positive_weight_scale: 1.0
+  stage1_lr: 0.0001
+  stage2_lr: 1e-05
+  weight_decay: 0.0001
+  batch_size: 32
+  epochs_stage1: 20
+  epochs_stage2: 30
+  stage_selection_metric: composite_positive_macro
+  seed: 42
+
+evaluation:
+  primary:
+    - positive_auc
+    - positive_prc
+  guardrails:
+    - macro_ovr_auc
+    - weighted_ovr_auc
+    - negative_auc
+    - other_auc
