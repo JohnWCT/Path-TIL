@@ -352,7 +352,7 @@ def render_scoreboard_markdown(payload):
         "- Positive PRC：**{0:.4f}**".format(candidate["positive_prc"]),
         "- 主要判斷：positive AUC / PRC；hard/soft TIL MAE 僅參考。",
         "",
-        "敘事報告：[`hnscc_groupcv_optimization_report.md`](hnscc_groupcv_optimization_report.md)",
+        "敘事報告：[`hnscc_master_report.md`](hnscc_master_report.md)",
         "",
     ]
 

@@ -176,13 +176,7 @@ with ThreadPoolExecutor(max_workers=min(3, len(archives))) as pool:
 
 完整報告：
 
-- [5-fold baseline、每 case TIL 誤差與優化計畫](docs/hnscc_groupcv_baseline_report.md)
-- [H&E、augmentation、class weight、stage、error audit 與 TIL calibration 測試 1–6](docs/hnscc_groupcv_optimization_report.md)
-- [方法學優化工作流程（loss / sampler / stage / threshold）](docs/hnscc_methodology_optimization.md)
-- [Living Scoreboard（分主題分數比較，持續更新）](docs/hnscc_living_scoreboard.md)
-- [方法學比較摘要](docs/hnscc_methodology_comparison_table.md)
-- [External lock-box 報告模板](docs/hnscc_external_lockbox_report.md)
-- [Seed stability 報告模板](docs/hnscc_candidate_stability_report.md)
+- [HNSCC 實驗總結（Master Report）](docs/hnscc_master_report.md)
 
 ### HNSCC Candidate and Backbone Roadmap
 
