@@ -69,20 +69,41 @@ def load_manifest_images(base, frame: pd.DataFrame, use_hne_norm: bool, workers:
     return np.asarray(images, dtype=np.uint8), report
 
 
-def load_classifier_model(tf, base, model_path: str):
+def load_classifier_model(tf, base, model_path: str, backbone: str | None = None):
     """Load IRV2 checkpoints or generic backbone classifiers."""
-    try:
-        return base.load_and_validate_model(tf, model_path, mixed_precision=False)
-    except ValueError:
-        model = tf.keras.models.load_model(model_path, compile=False)
-        output_shape = model.output_shape
-        if isinstance(output_shape, list) or int(output_shape[-1]) != len(LABELS):
-            raise ValueError(
-                "Unsupported classifier output shape for {0}: {1}".format(
-                    model_path, output_shape
-                )
+    from path_til.model_factory import load_classifier_from_checkpoint
+
+    text = str(model_path).lower()
+    inferred = backbone
+    if inferred is None:
+        if "convnext" in text:
+            inferred = "convnext_tiny"
+        elif "efficientnet" in text:
+            inferred = "efficientnetv2_s"
+
+    # Prefer rebuild+weights for known custom-layer backbones (e.g. ConvNeXt LayerScale).
+    if inferred in {"convnext_tiny", "efficientnetv2_s"}:
+        model = load_classifier_from_checkpoint(
+            tf,
+            inferred,
+            model_path,
+            num_classes=len(LABELS),
+            dropout=0.3,
+        )
+    else:
+        try:
+            model = base.load_and_validate_model(tf, model_path, mixed_precision=False)
+        except (ValueError, TypeError, OSError):
+            model = tf.keras.models.load_model(model_path, compile=False)
+
+    output_shape = model.output_shape
+    if isinstance(output_shape, list) or int(output_shape[-1]) != len(LABELS):
+        raise ValueError(
+            "Unsupported classifier output shape for {0}: {1}".format(
+                model_path, output_shape
             )
-        return model
+        )
+    return model
 
 
 def predict_with_models(tf, base, models, images, batch_size: int, prefetch: int = 4) -> np.ndarray:

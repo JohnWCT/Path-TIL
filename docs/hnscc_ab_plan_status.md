@@ -1,38 +1,32 @@
 # HNSCC A/B Plan Execution Status
 
-> Updated: 2026-07-22  
-> Orchestrator log: `results/results_ab_plan_orchestrator/`
+> Updated: 2026-07-23  
+> All planned A/B + B5/B6/B7 phases complete.
 
 ## Completed
 
-| Phase | Output | Result |
-|---|---|---|
-| B1–B4 / A1–A4 / SUMMARY | 見先前報告 | OK |
-| **B5** EfficientNet ×6 | `results_backbone_b5_grid_efficientnetv2_s/` | OK |
-| **B5** ConvNeXt ×6 | `results_backbone_b5_grid_convnext_tiny/` | OK |
-| **B5 selection** | `results_backbone_b5_selection/` | 2 configs → B6 |
-
-## B5 conclusion
-
-- 12/12 完成；**無人達到 `replace_candidate`**（macro/weighted OVR 仍低於 IRV2）。
-- 入圍 B6：
-  - ConvNeXt-Tiny `h6_low_lr`
-  - EfficientNetV2-S `h4_more_tcga`
-
-## In progress / next
-
-| Phase | Status |
+| Phase | Result |
 |---|---|
-| B6 full 5-fold（入圍 2 組） | starting |
-| B7 external lock-box | after B6 |
+| A1–A4 / B1–B4 | OK（先前完成） |
+| B5 repair grid ×12 | OK；無人 replace |
+| B6 full5（入圍 2 組） | OK |
+| B7 external lock-box | OK（report-only） |
+| Reports + comparison | OK |
 
-## Decision
+## Final decision
 
-- **Keep** IRV2 + source mix 0.50:0.50 as locked candidate.
-- B5: positive-specialist only; proceed to B6 for confirmation, not auto-replace.
+**Keep IRV2 + source mix 0.50:0.50 as locked candidate.**
 
-## Artifacts
+| model | HNSCC AUC | HNSCC PRC | macro OVR | decision |
+|---|---:|---:|---:|---|
+| IRV2 candidate | 0.8848 | 0.4196 | 0.9173 | **locked** |
+| EfficientNet full5 | 0.8792 | 0.4747 | 0.9222 | drop as primary |
+| ConvNeXt full5 | 0.8904 | 0.4858 | 0.9124 | specialist / not replace |
 
-- `results/results_backbone_b5_selection/backbone_b5_selection.csv`
+## Key artifacts
+
 - `docs/hnscc_backbone_b5_report.md`
+- `docs/hnscc_backbone_full5_report.md`
 - `docs/hnscc_backbone_decision_log.md`
+- `results/results_backbone_full5_comparison/backbone_candidate_comparison.csv`
+- `results/results_backbone_b5_selection/`

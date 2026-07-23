@@ -1,6 +1,6 @@
 # HNSCC Candidate Stability Report
 
-> Auto-updated at 2026-07-22 02:02 UTC.
+> Auto-updated at 2026-07-23 01:24 UTC.
 
 ## Aggregate
 

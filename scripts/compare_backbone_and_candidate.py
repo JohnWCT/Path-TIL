@@ -67,6 +67,7 @@ def build_row(
     source_pretrained: str = "",
     source_pretrain_val: dict | None = None,
     hnscc_source_mix_ratio: float | None = None,
+    is_reference: bool = False,
 ):
     source_pretrain_val = source_pretrain_val or {}
     row = {
@@ -90,6 +91,10 @@ def build_row(
         "rumc_brca_positive_auc": external.get("RUMC-BRCA", {}).get("positive_auc"),
         "rumc_brca_positive_prc": external.get("RUMC-BRCA", {}).get("positive_prc"),
     }
+    if is_reference:
+        row["keep_or_drop"] = "locked"
+        row["notes"] = "locked_candidate_reference"
+        return row
     decision = evaluate_against_candidate(
         {
             "positive_auc": row["hnscc_oof_positive_auc"] or 0.0,
@@ -101,6 +106,18 @@ def build_row(
     row["keep_or_drop"] = decision["decision"]
     row["notes"] = ";".join(decision["reasons"]) if decision["reasons"] else "meets_criteria"
     return row
+
+
+def match_side_result(experiment_name: str, side_by_name: dict) -> dict:
+    """Match OOF experiment names to external/TCGA result directories by substring."""
+    if experiment_name in side_by_name:
+        return side_by_name[experiment_name]
+    for key, value in side_by_name.items():
+        if experiment_name and experiment_name in key:
+            return value
+        if key and key in experiment_name:
+            return value
+    return {}
 
 
 def main():
@@ -117,14 +134,21 @@ def main():
 
     rows = []
     reference = load_oof_metrics(Path(args.reference))
+    ref_name = reference["experiment"]
+    ref_external = match_side_result(
+        "results_external_testset_r50_50", external_by_experiment
+    )
+    if not ref_external and args.external_results:
+        ref_external = external_by_experiment.get(Path(args.external_results[0]).name, {})
     rows.append(
         build_row(
-            reference["experiment"],
+            ref_name,
             reference,
-            external_by_experiment.get(Path(args.external_results[0]).name if args.external_results else "", {}),
-            tcga_by_experiment.get(Path(args.external_results[0]).name if args.external_results else "", {}),
+            ref_external,
+            match_side_result(ref_name, tcga_by_experiment),
             backbone="irv2",
             hnscc_source_mix_ratio=0.50,
+            is_reference=True,
         )
     )
     for experiment in args.experiments:
@@ -134,8 +158,8 @@ def main():
             build_row(
                 name,
                 oof,
-                external_by_experiment.get(name, {}),
-                tcga_by_experiment.get(name, {}),
+                match_side_result(name, external_by_experiment),
+                match_side_result(name, tcga_by_experiment),
             )
         )
 

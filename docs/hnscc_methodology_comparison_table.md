@@ -55,6 +55,16 @@
 
 B5 全 12 組皆未修復 macro/weighted OVR；**不取代 IRV2**。詳見 [`hnscc_backbone_b5_report.md`](hnscc_backbone_b5_report.md)。
 
+## Backbone full5 + external（B6/B7）
+
+| model | OOF AUC | OOF PRC | macro OVR | 決策 |
+|---|---:|---:|---:|---|
+| **IRV2 candidate** | **0.8848** | 0.4196 | 0.9173 | **維持** |
+| EfficientNetV2-S | 0.8792 | 0.4747 | 0.9222 | drop as primary |
+| ConvNeXt-Tiny | 0.8904 | 0.4858 | 0.9124 | specialist only |
+
+詳見 [`hnscc_backbone_full5_report.md`](hnscc_backbone_full5_report.md)。
+
 ## 再生指令（Docker TIL）
 
 ```bash

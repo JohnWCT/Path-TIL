@@ -1,6 +1,6 @@
 # HNSCC Backbone B5 Hyperparameter Repair Report
 
-> Auto-updated by `scripts/update_backbone_report.py` at 2026-07-22 13:08 UTC.
+> Auto-updated by `scripts/update_backbone_report.py` at 2026-07-23 01:28 UTC.
 
 ## Reference
 
@@ -36,14 +36,32 @@ changes can preserve positive gains while repairing multiclass degradation.
 
 ## Decision
 
-**B5 無法修復 macro / weighted OVR**：12 組皆為 `positive_specialist_pending_full5`（無 `replace_candidate`）。
+### Selected for B6 (≤1 per backbone)
 
-### Selected for B6（每 backbone 最佳 1 組，作 full5 比較）
+- backbone_convnext_tiny_b5_h6_low_lr
+- backbone_efficientnetv2_s_b5_h4_more_tcga
 
-- `backbone_convnext_tiny_b5_h6_low_lr`（AUC 0.9033 / PRC 0.5708）
-- `backbone_efficientnetv2_s_b5_h4_more_tcga`（AUC 0.9001 / PRC 0.5541）
+### positive-specialist (not auto-replace)
+
+- backbone_convnext_tiny_b5_h6_low_lr
+- backbone_convnext_tiny_b5_h5_macro_stage
+- backbone_convnext_tiny_b5_h3_lower_pos_weight
+- backbone_convnext_tiny_b5_h1
+- backbone_efficientnetv2_s_b5_h4_more_tcga
+- backbone_efficientnetv2_s_b5_h1
+- backbone_efficientnetv2_s_b5_h5_macro_stage
+- backbone_efficientnetv2_s_b5_h6_low_lr
+- backbone_efficientnetv2_s_b5_h3_lower_pos_weight
+- backbone_convnext_tiny_b5_h4_more_tcga
+- backbone_convnext_tiny_b5_h2_label_smoothing
+- backbone_efficientnetv2_s_b5_h2_label_smoothing
+
+### drop
+
+- none
 
 ### Interpretation
 
-- 可進 B6 作為 academic / Pareto 比較，**不可直接取代 IRV2 candidate**。
-- 若 B6 仍無法同時滿足 macro / weighted guardrail，維持 IRV2 主候選，新 backbone 標為 positive-specialist。
+- **B5 無法修復 macro / weighted OVR**：12 組皆為 `positive_specialist_pending_full5`（無 `replace_candidate`）。
+- 入圍 B6：`h6_low_lr`（ConvNeXt）、`h4_more_tcga`（EfficientNet）。
+- B6/B7 結論見 [`hnscc_backbone_full5_report.md`](hnscc_backbone_full5_report.md)：兩組皆不取代 IRV2 candidate。

@@ -1,38 +1,33 @@
 # HNSCC Backbone Decision Log
 
-> Updated: 2026-07-22
+> Updated: 2026-07-23
 
-## Locked candidate
+## Locked candidate（維持）
 
-- Backbone: InceptionResNetV2
-- Source mix: 0.50:0.50
-- OOF positive AUC / PRC: 0.8848 / 0.4196
-- macro / weighted OVR AUC: 0.9173 / 0.9288
+- Backbone: **InceptionResNetV2**
+- Source mix: HNSCC:TCGA = **0.50:0.50**
+- OOF positive AUC / PRC: **0.8848 / 0.4196**
+- macro / weighted OVR: 0.9173 / 0.9288
 
-## B4 smoke
+## Pipeline outcome
 
-- EfficientNetV2-S / ConvNeXt-Tiny: positive AUC/PRC ↑, macro/weighted OVR ↓
-- Label: **positive-specialist trend**; not promoted
+| Phase | Result |
+|---|---|
+| B4 smoke | positive ↑, macro/weighted ↓ → specialist trend |
+| B5 repair ×12 | 無人 `replace_candidate`；選出 2 組進 B6 |
+| B6 full5 | EfficientNet：AUC 未過；ConvNeXt：macro 未過 |
+| B7 external | 兩組 external 穩定；**不取代** |
 
-## B5 repair grid（完成）
+## Final decision
 
-12 / 12 fold-0+1 runs finished. **No config repaired macro/weighted OVR enough to reach `replace_candidate`.**  
-All remain `positive_specialist_pending_full5`.
+```text
+KEEP: IRV2 + source mix 0.50:0.50 as primary candidate
+OPTIONAL: ConvNeXt-Tiny full5 as positive-specialist / Pareto reference
+OPTIONAL: EfficientNetV2-S full5 as PRC / multiclass reference (AUC slightly lower)
+DO NOT: replace primary candidate with either backbone
+```
 
-### Selected for B6（每 backbone 1 組）
+## Selected B5 → B6 configs
 
-| backbone | config | positive AUC | positive PRC | macro OVR | weighted OVR | fold AUC gap |
-|---|---|---:|---:|---:|---:|---:|
-| ConvNeXt-Tiny | `b5_h6_low_lr` | 0.9033 | 0.5708 | 0.9012 | 0.9035 | 0.0575 |
-| EfficientNetV2-S | `b5_h4_more_tcga` | 0.9001 | 0.5541 | 0.9047 | 0.9102 | 0.0557 |
-
-Artifacts:
-
-- `results/results_backbone_b5_selection/backbone_b5_selection.csv`
-- `results/results_backbone_b5_selection/selected_for_full5.txt`
-- `docs/hnscc_backbone_b5_report.md`
-
-## B6 / B7
-
-- B6: full 5-fold for the two selected configs（academic / Pareto comparison; not auto-replace）
-- B7: external lock-box only after B6; report-only
+- EfficientNetV2-S: `b5_h4_more_tcga`
+- ConvNeXt-Tiny: `b5_h6_low_lr`
